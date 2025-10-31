@@ -1343,13 +1343,14 @@ class RandomPerspective:
 
         segments = instances.segments
         keypoints = instances.keypoints
+        distances = instances.distances
         # Update bboxes if there are segments.
         if len(segments):
             bboxes, segments = self.apply_segments(segments, M)
 
         if keypoints is not None:
             keypoints = self.apply_keypoints(keypoints, M)
-        new_instances = Instances(bboxes, segments, keypoints, bbox_format="xyxy", normalized=False)
+        new_instances = Instances(bboxes, segments, keypoints, distances, bbox_format="xyxy", normalized=False)
         # Clip
         new_instances.clip(*self.size)
 
@@ -2107,6 +2108,7 @@ class Format:
         return_mask: bool = False,
         return_keypoint: bool = False,
         return_obb: bool = False,
+        return_distance: bool = False,
         mask_ratio: int = 4,
         mask_overlap: bool = True,
         batch_idx: bool = True,
@@ -2150,6 +2152,7 @@ class Format:
         self.return_mask = return_mask  # set False when training detection only
         self.return_keypoint = return_keypoint
         self.return_obb = return_obb
+        self.return_distance = return_distance
         self.mask_ratio = mask_ratio
         self.mask_overlap = mask_overlap
         self.batch_idx = batch_idx  # keep the batch indexes
@@ -2214,6 +2217,14 @@ class Format:
         if self.return_obb:
             labels["bboxes"] = (
                 xyxyxyxy2xywhr(torch.from_numpy(instances.segments)) if len(instances.segments) else torch.zeros((0, 5))
+            )
+        if self.return_distance:
+            # Normalize distances from [0,150] to [0,1]
+            max_dist = 150.0 # TODO: add to hyperparameters?
+            if instances.distances is not None and max_dist != 0.0:
+                instances.distances = np.clip(instances.distances, 0, max_dist) / max_dist
+            labels["distances"] = (
+                torch.empty(0, 3) if instances.distances is None else torch.from_numpy(instances.distances)
             )
         # NOTE: need to normalize obb in xywhr format for width-height consistency
         if self.normalize:

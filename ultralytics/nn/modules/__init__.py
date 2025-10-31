@@ -78,6 +78,7 @@ from .conv import (
 )
 from .head import (
     OBB,
+    Dist,
     Classify,
     Detect,
     LRPCHead,
@@ -155,6 +156,7 @@ __all__ = (
     "MLP",
     "ResNetLayer",
     "OBB",
+    "Dist",
     "WorldDetect",
     "YOLOEDetect",
     "YOLOESegment",
