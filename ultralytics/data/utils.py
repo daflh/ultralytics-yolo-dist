@@ -210,7 +210,9 @@ def verify_image_label(args: tuple) -> list:
                     lb = np.concatenate((classes.reshape(-1, 1), segments2boxes(segments)), 1)  # (cls, xywh)
                 lb = np.array(lb, dtype=np.float32)
             if nl := len(lb):
-                assert lb.shape[1] == expected_cols, f"labels require {expected_cols} columns, {lb.shape[1]} columns detected"
+                assert lb.shape[1] == expected_cols, (
+                    f"labels require {expected_cols} columns, {lb.shape[1]} columns detected"
+                )
                 points = lb[:, 5:].reshape(-1, ndim)[:, :2] if keypoint else lb[:, 1:5] if distance else lb[:, 1:]
                 # Coordinate points check with 1% tolerance
                 assert points.max() <= 1.01, f"non-normalized or out of bounds coordinates {points[points > 1.01]}"
@@ -463,7 +465,7 @@ def check_det_dataset(dataset: str, autodownload: bool = True) -> dict[str, Any]
         if not all(x.exists() for x in val):
             name = clean_url(dataset)  # dataset name with URL auth stripped
             LOGGER.info("")
-            m = f"Dataset '{name}' images not found, missing path '{[x for x in val if not x.exists()][0]}'"
+            m = f"Dataset '{name}' images not found, missing path '{next(x for x in val if not x.exists())}'"
             if s and autodownload:
                 LOGGER.warning(m)
             else:
@@ -750,7 +752,7 @@ class HUBDatasetStats:
         return self.im_dir
 
 
-def compress_one_image(f: str, f_new: str = None, max_dim: int = 1920, quality: int = 50):
+def compress_one_image(f: str, f_new: str | None = None, max_dim: int = 1920, quality: int = 50):
     """
     Compress a single image file to reduced size while preserving its aspect ratio and quality using either the Python
     Imaging Library (PIL) or OpenCV library. If the input image is smaller than the maximum dimension, it will not be
