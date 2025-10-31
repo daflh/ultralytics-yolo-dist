@@ -76,8 +76,8 @@ from ultralytics.utils.loss import (
     E2EDetectLoss,
     v8ClassificationLoss,
     v8DetectionLoss,
-    v8OBBLoss,
     v8DistLoss,
+    v8OBBLoss,
     v8PoseLoss,
     v8SegmentationLoss,
 )
@@ -413,7 +413,9 @@ class DetectionModel(BaseModel):
                 """Perform a forward pass through the model, handling different Detect subclass types accordingly."""
                 if self.end2end:
                     return self.forward(x)["one2many"]
-                return self.forward(x)[0] if isinstance(m, (Segment, YOLOESegment, Pose, OBB, Dist)) else self.forward(x)
+                return (
+                    self.forward(x)[0] if isinstance(m, (Segment, YOLOESegment, Pose, OBB, Dist)) else self.forward(x)
+                )
 
             self.model.eval()  # Avoid changing batch statistics until training begins
             m.training = True  # Setting it to True to properly return strides
@@ -1572,7 +1574,7 @@ def parse_model(d, ch, verbose=True):
     scale = d.get("scale")
     if scales:
         if not scale:
-            scale = tuple(scales.keys())[0]
+            scale = next(iter(scales.keys()))
             LOGGER.warning(f"no model scale passed. Assuming scale='{scale}'.")
         depth, width, max_channels = scales[scale]
 
@@ -1719,7 +1721,7 @@ def parse_model(d, ch, verbose=True):
         m_.np = sum(x.numel() for x in m_.parameters())  # number params
         m_.i, m_.f, m_.type = i, f, t  # attach index, 'from' index, type
         if verbose:
-            LOGGER.info(f"{i:>3}{str(f):>20}{n_:>3}{m_.np:10.0f}  {t:<45}{str(args):<30}")  # print
+            LOGGER.info(f"{i:>3}{f!s:>20}{n_:>3}{m_.np:10.0f}  {t:<45}{args!s:<30}")  # print
         save.extend(x % i for x in ([f] if isinstance(f, int) else f) if x != -1)  # append to savelist
         layers.append(m_)
         if i == 0:
@@ -1763,7 +1765,7 @@ def guess_model_scale(model_path):
         (str): The size character of the model's scale (n, s, m, l, or x).
     """
     try:
-        return re.search(r"yolo(e-)?[v]?\d+([nslmx])", Path(model_path).stem).group(2)  # noqa
+        return re.search(r"yolo(e-)?[v]?\d+([nslmx])", Path(model_path).stem).group(2)
     except AttributeError:
         return ""
 

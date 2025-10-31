@@ -439,7 +439,13 @@ class Instances:
                 self.distances = self.distances[good]
         return good
 
-    def update(self, bboxes: np.ndarray, segments: np.ndarray = None, keypoints: np.ndarray = None, distances: np.ndarray = None) -> None:
+    def update(
+        self,
+        bboxes: np.ndarray,
+        segments: np.ndarray = None,
+        keypoints: np.ndarray = None,
+        distances: np.ndarray = None,
+    ) -> None:
         """
         Update instance variables.
 
