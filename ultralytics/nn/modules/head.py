@@ -20,7 +20,18 @@ from .conv import Conv, DWConv
 from .transformer import MLP, DeformableTransformerDecoder, DeformableTransformerDecoderLayer
 from .utils import bias_init_with_prob, linear_init
 
-__all__ = "Detect", "Segment", "Pose", "Classify", "OBB", "Dist", "RTDETRDecoder", "v10Detect", "YOLOEDetect", "YOLOESegment"
+__all__ = (
+    "OBB",
+    "Classify",
+    "Detect",
+    "Dist",
+    "Pose",
+    "RTDETRDecoder",
+    "Segment",
+    "YOLOEDetect",
+    "YOLOESegment",
+    "v10Detect",
+)
 
 
 class Detect(nn.Module):
@@ -355,7 +366,7 @@ class Dist(Detect):
         dist = torch.cat([self.cv4[i](x[i]).view(bs, self.ne, -1) for i in range(self.nl)], 2)
         dist = dist.sigmoid()
         if not self.training:
-            dist = dist * 150.0 # bring distance back to real-life size
+            dist = dist * 150.0  # bring distance back to real-life size
             self.dist = dist
         x = Detect.forward(self, x)
         if self.training:

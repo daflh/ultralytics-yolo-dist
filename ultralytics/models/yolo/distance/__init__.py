@@ -4,4 +4,4 @@ from .predict import DistPredictor
 from .train import DistTrainer
 from .val import DistValidator
 
-__all__ = "DistTrainer", "DistValidator", "DistPredictor"
+__all__ = "DistPredictor", "DistTrainer", "DistValidator"
