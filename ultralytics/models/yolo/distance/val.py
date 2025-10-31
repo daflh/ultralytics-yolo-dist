@@ -2,16 +2,14 @@
 
 from __future__ import annotations
 
-from pathlib import Path
 from typing import Any
 
 import numpy as np
 import torch
 
 from ultralytics.models.yolo.detect import DetectionValidator
-from ultralytics.utils import LOGGER, ops
+from ultralytics.utils import ops
 from ultralytics.utils.metrics import DistMetrics, batch_probiou
-from ultralytics.utils.nms import TorchNMS
 
 
 class DistValidator(DetectionValidator):
@@ -67,4 +65,3 @@ class DistValidator(DetectionValidator):
                 pbatch["imgsz"], predn["bboxes"].clone(), pbatch["ori_shape"], ratio_pad=pbatch["ratio_pad"], xywh=True
             ),
         }
-    
