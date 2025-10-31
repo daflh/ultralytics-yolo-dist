@@ -13,8 +13,8 @@ from ultralytics.models import yolo
 from ultralytics.nn.tasks import (
     ClassificationModel,
     DetectionModel,
-    OBBModel,
     DistModel,
+    OBBModel,
     PoseModel,
     SegmentationModel,
     WorldModel,
@@ -128,7 +128,7 @@ class YOLO(Model):
                 "trainer": yolo.distance.DistTrainer,
                 "validator": yolo.distance.DistValidator,
                 "predictor": yolo.distance.DistPredictor,
-            }
+            },
         }
 
 
