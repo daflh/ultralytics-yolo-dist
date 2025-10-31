@@ -14,6 +14,7 @@ from ultralytics.nn.tasks import (
     ClassificationModel,
     DetectionModel,
     OBBModel,
+    DistModel,
     PoseModel,
     SegmentationModel,
     WorldModel,
@@ -122,6 +123,12 @@ class YOLO(Model):
                 "validator": yolo.obb.OBBValidator,
                 "predictor": yolo.obb.OBBPredictor,
             },
+            "dist": {
+                "model": DistModel,
+                "trainer": yolo.distance.DistTrainer,
+                "validator": yolo.distance.DistValidator,
+                "predictor": yolo.distance.DistPredictor,
+            }
         }
 
 

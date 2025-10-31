@@ -1590,3 +1590,9 @@ class OBBMetrics(DetMetrics):
         DetMetrics.__init__(self, names)
         # TODO: probably remove task as well
         self.task = "obb"
+
+class DistMetrics(DetMetrics):
+    def __init__(self, names: dict[int, str] = {}) -> None:
+        DetMetrics.__init__(self, names)
+        # TODO: probably remove task as well
+        self.task = "dist"

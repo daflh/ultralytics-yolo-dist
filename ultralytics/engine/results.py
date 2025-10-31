@@ -247,6 +247,7 @@ class Results(SimpleClass, DataExportMixin):
         probs: torch.Tensor | None = None,
         keypoints: torch.Tensor | None = None,
         obb: torch.Tensor | None = None,
+        distances: torch.Tensor | None = None,
         speed: dict[str, float] | None = None,
     ) -> None:
         """
@@ -283,11 +284,12 @@ class Results(SimpleClass, DataExportMixin):
         self.probs = Probs(probs) if probs is not None else None
         self.keypoints = Keypoints(keypoints, self.orig_shape) if keypoints is not None else None
         self.obb = OBB(obb, self.orig_shape) if obb is not None else None
+        self.distances = distances if distances is not None else None
         self.speed = speed if speed is not None else {"preprocess": None, "inference": None, "postprocess": None}
         self.names = names
         self.path = path
         self.save_dir = None
-        self._keys = "boxes", "masks", "probs", "keypoints", "obb"
+        self._keys = "boxes", "masks", "probs", "keypoints", "obb", "distances"
 
     def __getitem__(self, idx):
         """
@@ -331,6 +333,7 @@ class Results(SimpleClass, DataExportMixin):
         probs: torch.Tensor | None = None,
         obb: torch.Tensor | None = None,
         keypoints: torch.Tensor | None = None,
+        distances: torch.Tensor | None = None,
     ):
         """
         Update the Results object with new detection data.
@@ -361,6 +364,8 @@ class Results(SimpleClass, DataExportMixin):
             self.obb = OBB(obb, self.orig_shape)
         if keypoints is not None:
             self.keypoints = Keypoints(keypoints, self.orig_shape)
+        if distances is not None:
+            self.distances = distances
 
     def _apply(self, fn: str, *args, **kwargs):
         """
@@ -487,6 +492,7 @@ class Results(SimpleClass, DataExportMixin):
         boxes: bool = True,
         masks: bool = True,
         probs: bool = True,
+        dists: bool = True,
         show: bool = False,
         save: bool = False,
         filename: str | None = None,
@@ -534,6 +540,7 @@ class Results(SimpleClass, DataExportMixin):
         pred_boxes, show_boxes = self.obb if is_obb else self.boxes, boxes
         pred_masks, show_masks = self.masks, masks
         pred_probs, show_probs = self.probs, probs
+        pred_dists, show_dists = self.distances, dists
         annotator = Annotator(
             deepcopy(self.orig_img if img is None else img),
             line_width,
@@ -568,7 +575,14 @@ class Results(SimpleClass, DataExportMixin):
             for i, d in enumerate(reversed(pred_boxes)):
                 c, d_conf, id = int(d.cls), float(d.conf) if conf else None, int(d.id.item()) if d.is_track else None
                 name = ("" if id is None else f"id:{id} ") + names[c]
-                label = (f"{name} {d_conf:.2f}" if conf else name) if labels else None
+                if labels:
+                    if pred_dists is not None and show_dists:
+                        dist = pred_dists.data[i].cpu().numpy()
+                        label = f"{name} {d_conf:.2f} {dist:.2f}m" if conf else f"{name} {dist:.2f}m"
+                    else:
+                        label = f"{name} {d_conf:.2f}" if conf else name
+                else:
+                    label = None
                 box = d.xyxyxyxy.squeeze() if is_obb else d.xyxy.squeeze()
                 annotator.box_label(
                     box,
