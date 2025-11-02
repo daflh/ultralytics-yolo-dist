@@ -6,12 +6,12 @@ from typing import Any
 from copy import copy
 from pathlib import Path
 
-from ultralytics.models.yolo.detect import DetectionTrainer, DetectionValidator
+from ultralytics.models import yolo
 from ultralytics.nn.tasks import DistModel
 from ultralytics.utils import DEFAULT_CFG, RANK
 
 
-class DistTrainer(DetectionTrainer):
+class DistTrainer(yolo.detect.DetectionTrainer):
     def __init__(self, cfg=DEFAULT_CFG, overrides: dict | None = None, _callbacks: list[Any] | None = None):
         if overrides is None:
             overrides = {}
@@ -29,6 +29,6 @@ class DistTrainer(DetectionTrainer):
 
     def get_validator(self):
         self.loss_names = "box_loss", "dist_loss", "cls_loss", "dfl_loss"
-        return DetectionValidator(
+        return yolo.distance.DistValidator(
             self.test_loader, save_dir=self.save_dir, args=copy(self.args), _callbacks=self.callbacks
         )

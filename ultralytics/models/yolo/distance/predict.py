@@ -10,12 +10,6 @@ class DistPredictor(DetectionPredictor):
         super().__init__(cfg, overrides, _callbacks)
         self.args.task = "dist"
 
-    def construct_results(self, preds, img, orig_imgs):
-        return [
-            self.construct_result(pred, img, orig_img, img_path)
-            for pred, orig_img, img_path in zip(preds, orig_imgs, self.batch[0])
-        ]
-
     def construct_result(self, pred, img, orig_img, img_path):
         pred[:, :4] = ops.scale_boxes(img.shape[2:], pred[:, :4], orig_img.shape)
         return Results(
