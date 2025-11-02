@@ -789,9 +789,9 @@ class v8DistLoss(v8DetectionLoss):
         )
 
         # B, grids, ..
-        pred_scores = pred_scores.permute(0, 2, 1).contiguous() # [1, 8400, 80]
-        pred_distri = pred_distri.permute(0, 2, 1).contiguous() # [1, 8400, 64]
-        pred_dist = pred_dist.permute(0, 2, 1).contiguous() # [1, 8400, 1]
+        pred_scores = pred_scores.permute(0, 2, 1).contiguous() # [b, 8400, 80]
+        pred_distri = pred_distri.permute(0, 2, 1).contiguous() # [b, 8400, 64]
+        pred_dist = pred_dist.permute(0, 2, 1).contiguous() # [b, 8400, 1]
 
         dtype = pred_scores.dtype
         imgsz = torch.tensor(feats[0].shape[2:], device=self.device, dtype=dtype) * self.stride[0]  # image size (h,w)
@@ -832,7 +832,7 @@ class v8DistLoss(v8DetectionLoss):
             distances = batch["distances"].to(self.device).float().clone()
             # distances = distances.unsqueeze(0) # [b, obj, 3]
             loss[1] = self.calculate_distance_loss(
-                fg_mask, target_gt_idx, distances, batch_idx, stride_tensor, pred_dist
+                pred_dist, fg_mask, target_gt_idx, distances, batch_idx
             )
 
         loss[0] *= self.hyp.box  # box gain
@@ -844,12 +844,11 @@ class v8DistLoss(v8DetectionLoss):
 
     def calculate_distance_loss(
         self,
-        masks: torch.Tensor,
-        target_gt_idx: torch.Tensor,
-        distances: torch.Tensor,
-        batch_idx: torch.Tensor,
-        stride_tensor: torch.Tensor,
-        pred_distances: torch.Tensor,
+        pred_distances: torch.Tensor, # predicted distances [b, 8400, 1]
+        masks: torch.Tensor, # targets foreground masks: (True, False) [b, 8400]
+        target_gt_idx: torch.Tensor, # targets object index [b, 8400]
+        distances: torch.Tensor, # GT distances [num_obj, 3]
+        batch_idx: torch.Tensor, # [num_obj, 1]
     ) -> torch.Tensor:
         batch_idx = batch_idx.flatten()
         batch_size = len(masks)
@@ -857,9 +856,10 @@ class v8DistLoss(v8DetectionLoss):
 
         # prepare batched GT distances [BS, max_obj, 1]
         max_obj = torch.unique(batch_idx, return_counts=True)[1].max()
+        # z_distances = torch.linalg.norm(distances, dim=-1, keepdim=True)
         z_distances = distances[..., 2].unsqueeze(-1) # TODO: euclidean distance
         batched_dist = torch.zeros((batch_size, max_obj, 1), device=device)
-        for i in range(batch_size):
+        for i in range(batch_size): # loop through batch/image
             dist_i = z_distances[batch_idx == i]
             batched_dist[i, :dist_i.shape[0]] = dist_i
 
@@ -868,7 +868,7 @@ class v8DistLoss(v8DetectionLoss):
         selected_gt_dist = batched_dist.gather(1, gt_idx_exp.expand(-1, -1, 1))
 
         # L2 loss between prediction and ground truth
-        diff = (pred_distances - selected_gt_dist / stride_tensor.view(1, -1, 1))
+        diff = (pred_distances - selected_gt_dist)
         dist_loss = (diff[masks] ** 2).mean() if masks.any() else torch.tensor(0.0, device=device)
 
         return dist_loss
