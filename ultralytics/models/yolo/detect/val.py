@@ -117,7 +117,7 @@ class DetectionValidator(BaseValidator):
             (list[dict[str, torch.Tensor]]): Processed predictions after NMS, where each dict contains
                 'bboxes', 'conf', 'cls', and 'extra' tensors.
         """
-        outputs = nms.non_max_suppression(
+        nms_result = nms.non_max_suppression(
             preds,
             self.args.conf,
             self.args.iou,
@@ -127,7 +127,9 @@ class DetectionValidator(BaseValidator):
             max_det=self.args.max_det,
             end2end=self.end2end,
             rotated=self.args.task == "obb",
+            return_idxs=True
         )
+        outputs = nms_result if isinstance(nms_result, list) else nms_result[0]
         return [{"bboxes": x[:, :4], "conf": x[:, 4], "cls": x[:, 5], "extra": x[:, 6:]} for x in outputs]
 
     def _prepare_batch(self, si: int, batch: dict[str, Any]) -> dict[str, Any]:

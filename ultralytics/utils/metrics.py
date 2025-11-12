@@ -1594,5 +1594,86 @@ class OBBMetrics(DetMetrics):
 class DistMetrics(DetMetrics):
     def __init__(self, names: dict[int, str] = {}) -> None:
         DetMetrics.__init__(self, names)
-        # TODO: probably remove task as well
         self.task = "dist"
+        # add stats to collect predicted and target z distances per prediction
+        # these arrays are appended per-batch by the validator via update_stats
+        self.stats["pred_dist"] = []
+        self.stats["target_dist"] = []
+        # per-prediction matched target class (length == n_pred per image).
+        # Filled by DistValidator._process_batch as -1 for unmatched preds.
+        self.stats["target_cls_pred"] = []
+        # stored aggregated results
+        self._dist_mae = -1.0
+        self._dist_mre = -1.0
+        self._class_dist_mae = np.full((len(self.ap_class_index),), -1, dtype=float)
+        self._class_dist_mre = np.full((len(self.ap_class_index),), -1, dtype=float)
+
+    @property
+    def keys(self) -> list[str]:
+        return DetMetrics.keys.fget(self) + [
+            "metrics/MAE(D)",
+            "metrics/MRE(D)"
+        ]
+
+    def mean_results(self) -> list[float]:
+        # Compute mean MAE and MRE computed during process()
+        base = DetMetrics.mean_results(self)
+        return base + [float(self._dist_mae), float(self._dist_mre)]
+
+    def class_result(self, i: int) -> list[float]:
+        # Append per-class MAE and MRE for class index i (indexed by ap_class_index)
+        base = DetMetrics.class_result(self, i)
+
+        if i < len(self._class_dist_mae):
+            mae_c = float(self._class_dist_mae[i])
+            mre_c = float(self._class_dist_mre[i])
+        else:
+            mae_c = -1.0
+            mre_c = -1.0
+
+        return base + (mae_c, mre_c)
+
+    def process(self, save_dir: Path = Path("."), plot: bool = False, on_plot=None) -> dict[str, np.ndarray]:
+        stats = DetMetrics.process(self, save_dir=save_dir, plot=plot, on_plot=on_plot)
+        if not stats:
+            return stats
+        
+        # reinitialize value because ap_class_index may have changed
+        self._dist_mae = -1.0
+        self._dist_mre = -1.0
+        self._class_dist_mae = np.full((len(self.ap_class_index),), -1, dtype=float)
+        self._class_dist_mre = np.full((len(self.ap_class_index),), -1, dtype=float)
+
+        # concatenate stats if not already
+        stats = {k: np.concatenate(v, 0) for k, v in self.stats.items()}
+
+        if "pred_dist" in stats and "target_dist" in stats and "tp" in stats:
+            pred_dist = stats["pred_dist"].astype(float)
+            target_dist = stats["target_dist"].astype(float)
+            tp = stats["tp"]
+            # use IoU@0.5 (first column) for matched indicators
+            matched = tp[:, 0].astype(bool) if tp.ndim == 2 and tp.shape[1] > 0 else np.zeros(tp.shape[0], dtype=bool)
+            sel = matched & np.isfinite(target_dist)
+            
+            # mean MAE/MRE
+            if sel.sum() > 0:
+                err = np.abs(pred_dist[sel] - target_dist[sel])
+                self._dist_mae = float(np.mean(err))
+                denom = np.abs(target_dist[sel]) + 1e-9
+                self._dist_mre = float(np.mean(err / denom))
+
+            # per-class MAE/MRE
+            for i, c in enumerate(self.ap_class_index):
+                sel_c = sel.copy()
+                if "target_cls_pred" in stats:
+                    sel_c &= (stats["target_cls_pred"] == c)
+                else:
+                    # fallback: no per-pred target class info -> cannot compute per-class distance reliably
+                    sel_c &= np.zeros(sel.shape, dtype=bool)
+                if sel_c.sum() > 0:
+                    err_c = np.abs(pred_dist[sel_c] - target_dist[sel_c])
+                    self._class_dist_mae[i] = float(np.mean(err_c))
+                    denom_c = np.abs(target_dist[sel_c]) + 1e-9
+                    self._class_dist_mre[i] = float(np.mean(err_c / denom_c))
+
+        return stats
