@@ -201,6 +201,7 @@ class Results(SimpleClass):
         show=False,
         save=False,
         filename=None,
+        name = None,
     ):
         """
         Plots the detection results on an input RGB image. Accepts a numpy array (cv2) or a PIL Image.
@@ -271,12 +272,28 @@ class Results(SimpleClass):
             idx = pred_boxes.cls if pred_boxes else range(len(pred_masks))
             annotator.masks(pred_masks.data, colors=[colors(x, True) for x in idx], im_gpu=im_gpu)
 
+        #with open("435data/labels/test/"+name+".txt","r") as ffff:
+        #    labels = ffff.readlines()
+        #labels = [l.split() for l in labels]
+        #breakpoint()
         # Plot Detect results
         if pred_boxes is not None and show_boxes:
-            for d in reversed(pred_boxes):
+            for i,d in enumerate(reversed(pred_boxes)):
+                #breakpoint()
                 c, conf, id = int(d.cls), float(d.conf) if conf else None, None if d.id is None else int(d.id.item())
-                name = ("" if id is None else f"id:{id} ") + names[c]
-                label = (f"{name} {conf:.2f}" if conf else name) if labels else None
+                dist = float(d.dist)*60
+                #predbox = d.xywhn
+                #px = predbox[0][0].tolist()
+                #td = 0
+                #for i in range(len(labels)):
+                #    tx = float(labels[i][1])
+                #    if abs(px-tx)<0.05:
+                #        td = float(labels[i][-1])
+                #        break
+                name = names[c]
+                #("" if id is None else f"id:{id} ") + names[c]
+                label = f"{name} {dist:.2f}" if labels else None   #/{td:.2f}" if labels else None
+                #(f"{name} {conf:.2f} {dist:.1f}" if conf else f"{name} {dist:.1f}") if labels else None
                 box = d.xyxyxyxy.reshape(-1, 4, 2).squeeze() if is_obb else d.xyxy.squeeze()
                 annotator.box_label(box, label, color=colors(c, True), rotated=is_obb)
 
@@ -324,7 +341,10 @@ class Results(SimpleClass):
         if boxes:
             for c in boxes.cls.unique():
                 n = (boxes.cls == c).sum()  # detections per class
-                log_string += f"{n} {self.names[int(c)]}{'s' * (n > 1)}, "
+                try:
+                    log_string += f"{n} {self.names[int(c)]}{'s' * (n > 1)}, "
+                except:
+                    log_string += f"{n} {int(c)}{'s'*(n > 1)}"
         return log_string
 
     def save_txt(self, txt_file, save_conf=False):
@@ -348,6 +368,7 @@ class Results(SimpleClass):
             # Detect/segment/pose
             for j, d in enumerate(boxes):
                 c, conf, id = int(d.cls), float(d.conf), None if d.id is None else int(d.id.item())
+                dist = float(d.dist)
                 line = (c, *(d.xyxyxyxyn.view(-1) if is_obb else d.xywhn.view(-1)))
                 if masks:
                     seg = masks[j].xyn[0].copy().reshape(-1)  # reversed mask.xyn, (n,2) to (n*2)
@@ -355,7 +376,8 @@ class Results(SimpleClass):
                 if kpts is not None:
                     kpt = torch.cat((kpts[j].xyn, kpts[j].conf[..., None]), 2) if kpts[j].has_visible else kpts[j].xyn
                     line += (*kpt.reshape(-1).tolist(),)
-                line += (conf,) * save_conf + (() if id is None else (id,))
+                #line += (conf,) * save_conf + (() if id is None else (id,))
+                line += (dist,)
                 texts.append(("%g " * len(line)).rstrip() % line)
 
         if texts:
@@ -470,7 +492,7 @@ class Boxes(BaseTensor):
         if boxes.ndim == 1:
             boxes = boxes[None, :]
         n = boxes.shape[-1]
-        assert n in {6, 7}, f"expected 6 or 7 values but got {n}"  # xyxy, track_id, conf, cls
+        assert n in {7, 8}, f"expected 7 or 8 values but got {n}"  # xyxy, track_id, conf, cls
         super().__init__(boxes, orig_shape)
         self.is_track = n == 7
         self.orig_shape = orig_shape
@@ -479,21 +501,26 @@ class Boxes(BaseTensor):
     def xyxy(self):
         """Return the boxes in xyxy format."""
         return self.data[:, :4]
+    
+    @property
+    def dist(self):
+        """Return the dists of the boxes"""
+        return self.data[:, -1]
 
     @property
     def conf(self):
         """Return the confidence values of the boxes."""
-        return self.data[:, -2]
+        return self.data[:, -3]
 
     @property
     def cls(self):
         """Return the class values of the boxes."""
-        return self.data[:, -1]
+        return self.data[:, -2]
 
     @property
     def id(self):
         """Return the track IDs of the boxes (if available)."""
-        return self.data[:, -3] if self.is_track else None
+        return self.data[:, -4] if self.is_track else None
 
     @property
     @lru_cache(maxsize=2)  # maxsize 1 should suffice

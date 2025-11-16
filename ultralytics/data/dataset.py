@@ -108,7 +108,8 @@ class YOLODataset(BaseDataset):
                             "im_file": im_file,
                             "shape": shape,
                             "cls": lb[:, 0:1],  # n, 1
-                            "bboxes": lb[:, 1:],  # n, 4
+                            "bboxes": lb[:, 1:-1],  # n, 4
+                            "dist": lb[:, -1:],
                             "segments": segments,
                             "keypoints": keypoint,
                             "normalized": True,
@@ -172,6 +173,17 @@ class YOLODataset(BaseDataset):
         return labels
 
     def build_transforms(self, hyp=None):
+        '''
+        Compose(
+            Compose(<ultralytics.data.augment.Mosaic object at 0x7f576edd7fd0>, <ultralytics.data.augment.CopyPaste object at 0x7f576edd7f40>, <ultralytics.data.augment.RandomPerspective object at 0x7f576edd7e50>), 
+            <ultralytics.data.augment.MixUp object at 0x7f576edd7d60>, 
+            <ultralytics.data.augment.Albumentations object at 0x7f576edd7d90>, 
+            <ultralytics.data.augment.RandomHSV object at 0x7f576edd7ca0>, 
+            <ultralytics.data.augment.RandomFlip object at 0x7f576edd7cd0>, 
+            <ultralytics.data.augment.RandomFlip object at 0x7f576edd7be0>, 
+            <ultralytics.data.augment.Format object at 0x7f576edd7c40>
+            )
+        '''
         """Builds and appends transforms to the list."""
         if self.augment:
             hyp.mosaic = hyp.mosaic if self.augment and not self.rect else 0.0
@@ -229,6 +241,7 @@ class YOLODataset(BaseDataset):
     @staticmethod
     def collate_fn(batch):
         """Collates data samples into batches."""
+        # input with/without dist info
         new_batch = {}
         keys = batch[0].keys()
         values = list(zip(*[list(b.values()) for b in batch]))
@@ -236,7 +249,7 @@ class YOLODataset(BaseDataset):
             value = values[i]
             if k == "img":
                 value = torch.stack(value, 0)
-            if k in {"masks", "keypoints", "bboxes", "cls", "segments", "obb"}:
+            if k in {"masks", "keypoints", "bboxes", "cls", "segments", "obb", "dist"}:
                 value = torch.cat(value, 0)
             new_batch[k] = value
         new_batch["batch_idx"] = list(new_batch["batch_idx"])

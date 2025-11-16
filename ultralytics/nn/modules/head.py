@@ -6,6 +6,9 @@ import math
 import torch
 import torch.nn as nn
 from torch.nn.init import constant_, xavier_uniform_
+import torchvision
+import torchvision.ops as ops
+from torch.utils.tensorboard import SummaryWriter       
 
 from ultralytics.utils.tal import TORCH_1_10, dist2bbox, dist2rbox, make_anchors
 
@@ -26,41 +29,55 @@ class Detect(nn.Module):
     anchors = torch.empty(0)  # init
     strides = torch.empty(0)  # init
 
-    def __init__(self, nc=80, ch=()):
+    def __init__(self, nc=7, ch=()):
         """Initializes the YOLOv8 detection layer with specified number of classes and channels."""
         super().__init__()
         self.nc = nc  # number of classes
         self.nl = len(ch)  # number of detection layers
         self.reg_max = 16  # DFL channels (ch[0] // 16 to scale 4/8/12/16/20 for n/s/m/l/x)
-        self.no = nc + self.reg_max * 4  # number of outputs per anchor
+        self.no = nc + 1 + self.reg_max * 4  # number of outputs per anchor
         self.stride = torch.zeros(self.nl)  # strides computed during build
         c2, c3 = max((16, ch[0] // 4, self.reg_max * 4)), max(ch[0], min(self.nc, 100))  # channels
+        c4 = 64#max(ch[0] // 4, 4)
+        # ch:  64,128,256
         self.cv2 = nn.ModuleList(
-            nn.Sequential(Conv(x, c2, 3), Conv(c2, c2, 3), nn.Conv2d(c2, 4 * self.reg_max, 1)) for x in ch
-        )
-        self.cv3 = nn.ModuleList(nn.Sequential(Conv(x, c3, 3), Conv(c3, c3, 3), nn.Conv2d(c3, self.nc, 1)) for x in ch)
+            nn.Sequential(Conv(x, c2, 3), Conv(c2, c2, 3), nn.Conv2d(c2, 4 * self.reg_max, 1)) for x in ch)   #BOX
+        self.cv3 = nn.ModuleList(nn.Sequential(Conv(x, c3, 3), Conv(c3, c3, 3), nn.Conv2d(c3, self.nc, 1)) for x in ch) #CLASS
+        self.cv5 = nn.ModuleList(nn.Sequential(nn.Conv2d(x, 64, 1), nn.ReLU(), nn.Conv2d(64, 32, 1), nn.ReLU(), nn.Conv2d(32, 1, 1),nn.ReLU()) for x in ch)  #DIST
+        
         self.dfl = DFL(self.reg_max) if self.reg_max > 1 else nn.Identity()
 
     def forward(self, x):
         """Concatenates and returns predicted bounding boxes and class probabilities."""
+        #inference x:   1,64,4,4     1,128,2,2     1,256,1,1
+        #training  x:   1,64,32,32   1,128,16,16   1,256,8,8
+        #breakpoint()
+        #writer = SummaryWriter("runs/log")
         for i in range(self.nl):
-            x[i] = torch.cat((self.cv2[i](x[i]), self.cv3[i](x[i])), 1)
+            #gd = torchvision.utils.make_grid(x[i][0],nrow=8, normalize=True, scale_each=True)
+            #writer.add_image("x",gd,0)
+            x[i] = torch.cat((self.cv2[i](x[i]), self.cv3[i](x[i]),self.cv5[i](x[i])), 1)
         if self.training:  # Training path
             return x
-
+        
+        #   x:list  0: 1,72,4,4  1:  1,72,2,2   2:  1,72,1,1    72:64+7+1
         # Inference path
         shape = x[0].shape  # BCHW
-        x_cat = torch.cat([xi.view(shape[0], self.no, -1) for xi in x], 2)
+        x_cat = torch.cat([xi.view(shape[0], self.no, -1) for xi in x], 2)      #1,72,21    21:16+4+1
+
+
         if self.dynamic or self.shape != shape:
             self.anchors, self.strides = (x.transpose(0, 1) for x in make_anchors(x, self.stride, 0.5))
             self.shape = shape
 
         if self.export and self.format in {"saved_model", "pb", "tflite", "edgetpu", "tfjs"}:  # avoid TF FlexSplitV ops
             box = x_cat[:, : self.reg_max * 4]
-            cls = x_cat[:, self.reg_max * 4 :]
+            cls = x_cat[:, self.reg_max * 4 :-1]
+            dis = x_cat[:, -1]
         else:
-            box, cls = x_cat.split((self.reg_max * 4, self.nc), 1)
+            box, cls, dis = x_cat.split((self.reg_max * 4, self.nc, 1), 1)   #   1,64,21    1,7,21    1,1,21
 
+        #breakpoint()
         if self.export and self.format in {"tflite", "edgetpu"}:
             # Precompute normalization factor to increase numerical stability
             # See https://github.com/ultralytics/ultralytics/issues/7371
@@ -71,8 +88,9 @@ class Detect(nn.Module):
             dbox = self.decode_bboxes(self.dfl(box) * norm, self.anchors.unsqueeze(0) * norm[:, :2])
         else:
             dbox = self.decode_bboxes(self.dfl(box), self.anchors.unsqueeze(0)) * self.strides
-
-        y = torch.cat((dbox, cls.sigmoid()), 1)
+        ###dbox:1,4,21
+        #breakpoint()
+        y = torch.cat((dbox, cls.sigmoid(), dis), 1)
         return y if self.export else (y, x)
 
     def bias_init(self):
@@ -159,6 +177,7 @@ class Pose(Detect):
     def forward(self, x):
         """Perform forward pass through YOLO model and return predictions."""
         bs = x[0].shape[0]  # batch size
+        #breakpoint()
         kpt = torch.cat([self.cv4[i](x[i]).view(bs, self.nk, -1) for i in range(self.nl)], -1)  # (bs, 17*3, h*w)
         x = Detect.forward(self, x)
         if self.training:
