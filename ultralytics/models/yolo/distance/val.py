@@ -29,10 +29,11 @@ class DistValidator(DetectionValidator):
         self.confusion_matrix.task = "dist"
 
     def _prepare_batch(self, si: int, batch: dict[str, Any]) -> dict[str, Any]:
+        max_dist = 100.0 # TODO: add to hyperparameters?
         pbatch = super()._prepare_batch(si, batch)
         dists = batch["distances"][batch["batch_idx"] == si]
         dists = dists.clone()
-        pbatch["distances"] = dists * 150.0
+        pbatch["distances"] = dists * max_dist
         return pbatch
 
     def _process_batch(self, preds: dict[str, torch.Tensor], batch: dict[str, torch.Tensor]) -> dict[str, np.ndarray]:

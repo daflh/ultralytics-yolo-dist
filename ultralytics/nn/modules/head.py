@@ -342,20 +342,44 @@ class OBB(Detect):
 class Dist(Detect):
     def __init__(self, nc: int = 80, ch: tuple = ()):
         super().__init__(nc, ch)
-        # only predict 1 number for absolute distance
         # TODO: use DFL for dist prediction
-        self.ne = 1  # number of extra parameters
+        self.ne = 1  # number of extra parameters (1 number for absolute distance)
+        self.max_dist = 100.0 # TODO: add to hyperparameters?
 
-        c4 = max(ch[0] // 4, self.ne)
-        self.cv4 = nn.ModuleList(nn.Sequential(Conv(x, c4, 3), Conv(c4, c4, 3), nn.Conv2d(c4, self.ne, 1)) for x in ch)
+        hidden_ratio = 0.25
+        mod = []
+        for x in ch:
+            hidden = max(int(x * hidden_ratio), 32)
+            mod.append(nn.Sequential(
+                nn.Conv2d(x, hidden, 3, padding=1, bias=False),
+                nn.BatchNorm2d(hidden),
+                nn.SiLU(inplace=True),
+
+                nn.Conv2d(hidden, hidden, 3, padding=1, bias=False),
+                nn.BatchNorm2d(hidden),
+                nn.SiLU(inplace=True),
+
+                nn.Conv2d(hidden, 1, 1)
+            ))
+
+        self.cv4 = nn.ModuleList(mod)
+
+        # Detection block implementation by billcao2000/yolov8-distance
+        # self.cv4 = nn.ModuleList(
+        #     nn.Sequential(
+        #         nn.Conv2d(x, 64, 1), nn.ReLU(),
+        #         nn.Conv2d(64, 32, 1), nn.ReLU(),
+        #         nn.Conv2d(32, 1, 1), nn.ReLU()
+        #     ) for x in ch
+        # )
 
     def forward(self, x: list[torch.Tensor]) -> torch.Tensor | tuple:
         bs = x[0].shape[0]  # batch size
         # predict distances for all predictions, out shape: [B, ne, total_locations]
         dist = torch.cat([self.cv4[i](x[i]).view(bs, self.ne, -1) for i in range(self.nl)], 2)
-        dist = dist.sigmoid()
+        # dist = dist.sigmoid()
         if not self.training:
-            dist = dist * 150.0 # bring distance back to real-life size
+            dist = dist * self.max_dist # bring distance back to real-life size on inference
             self.dist = dist
         x = Detect.forward(self, x)
         if self.training:

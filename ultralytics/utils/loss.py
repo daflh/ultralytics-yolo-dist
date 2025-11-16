@@ -777,9 +777,24 @@ class v8OBBLoss(v8DetectionLoss):
         return torch.cat((dist2rbox(pred_dist, pred_angle, anchor_points), pred_angle), dim=-1)
     
 
+class HuberLoss(nn.Module):
+    def __init__(self, c = 0.03):
+        super(HuberLoss, self).__init__()
+        self.c = c
+
+    def forward(self, y_true, y_pred):
+        error = y_true - y_pred
+        abs_error = torch.abs(error)
+        mask = abs_error < self.c
+        huber_loss = torch.where(mask, abs_error, (error ** 2 + self.c ** 2) / (2 * self.c))
+        return torch.mean(huber_loss)
+    
+
 class v8DistLoss(v8DetectionLoss):
     def __init__(self, model):
         super().__init__(model)
+        self.mse = nn.MSELoss()
+        self.huber = HuberLoss() # TODO: pake torch.nn.HuberLoss, coba SmoothL1Loss?
 
     def __call__(self, preds: Any, batch: dict[str, torch.Tensor]) -> tuple[torch.Tensor, torch.Tensor]:
         loss = torch.zeros(4, device=self.device)  # box, dist, cls, dfl
@@ -867,9 +882,17 @@ class v8DistLoss(v8DetectionLoss):
         gt_idx_exp = target_gt_idx.unsqueeze(-1)
         selected_gt_dist = batched_dist.gather(1, gt_idx_exp.expand(-1, -1, 1))
 
-        # L2 loss between prediction and ground truth
-        diff = (pred_distances - selected_gt_dist)
-        dist_loss = (diff[masks] ** 2).mean() if masks.any() else torch.tensor(0.0, device=device)
+        # # L2 loss between prediction and ground truth
+        # diff = (pred_distances - selected_gt_dist)
+        # dist_loss = (diff[masks] ** 2).mean() if masks.any() else torch.tensor(0.0, device=device)
+
+        if masks.any():
+            pred_sel = pred_distances[masks]
+            gt_sel = selected_gt_dist[masks]
+            # dist_loss = self.mse(gt_sel, pred_sel)
+            dist_loss = self.huber(gt_sel, pred_sel)
+        else:
+            dist_loss = torch.tensor(0.0, device=device, dtype=pred_distances.dtype)
 
         return dist_loss
         
