@@ -2,11 +2,8 @@ import torch
 import cv2
 import time
 import os
-from ultralytics import YOLO
-from torchinfo import summary
-import sys
 
-def detect_objects(model, input_path):
+def detect_objects(model, input_path, target_fps = 24):
     # model.info()
     # print(model)
 
@@ -50,6 +47,11 @@ def detect_objects(model, input_path):
             print(results[0].distances)
 
             # Compute FPS
+            infer_time = time.time() - frame_start
+            sleep_time = (1.0 / target_fps) - infer_time
+            if sleep_time > 0:
+                time.sleep(sleep_time)
+            
             frame_time = time.time() - frame_start
             fps = 1.0 / frame_time if frame_time > 0 else 0
 
@@ -63,8 +65,6 @@ def detect_objects(model, input_path):
                 break
 
             frame_count += 1
-
-            # time.sleep(5)
 
         cap.release()
         cv2.destroyAllWindows()
