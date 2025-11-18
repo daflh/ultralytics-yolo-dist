@@ -351,17 +351,11 @@ class Dist(Detect):
         for x in ch:
             hidden = max(int(x * hidden_ratio), 32)
             mod.append(nn.Sequential(
-                nn.Conv2d(x, hidden, 3, padding=1, bias=False),
-                nn.BatchNorm2d(hidden),
-                nn.SiLU(inplace=True),
-
-                nn.Conv2d(hidden, hidden, 3, padding=1, bias=False),
-                nn.BatchNorm2d(hidden),
-                nn.SiLU(inplace=True),
-
+                nn.Conv2d(x, hidden, 3, padding=1, bias=False), nn.BatchNorm2d(hidden), nn.SiLU(inplace=True),
+                nn.Conv2d(hidden, hidden, 3, padding=1, bias=False), nn.BatchNorm2d(hidden), nn.SiLU(inplace=True),
                 nn.Conv2d(hidden, 1, 1)
             ))
-
+            
         self.cv4 = nn.ModuleList(mod)
 
         # Detection block implementation by billcao2000/yolov8-distance
