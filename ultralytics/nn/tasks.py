@@ -74,7 +74,7 @@ from ultralytics.utils.checks import check_requirements, check_suffix, check_yam
 from ultralytics.utils.loss import (
     E2EDetectLoss,
     v8ClassificationLoss,
-    v8DetectionLoss,
+    v8DistLoss,
     v8OBBLoss,
     v8PoseLoss,
     v8SegmentationLoss,
@@ -497,7 +497,7 @@ class DetectionModel(BaseModel):
 
     def init_criterion(self):
         """Initialize the loss criterion for the DetectionModel."""
-        return E2EDetectLoss(self) if getattr(self, "end2end", False) else v8DetectionLoss(self)
+        return E2EDetectLoss(self) if getattr(self, "end2end", False) else v8DistLoss(self)
 
 
 class OBBModel(DetectionModel):

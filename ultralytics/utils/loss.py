@@ -191,7 +191,7 @@ class KeypointLoss(nn.Module):
         # e = d / (2 * (area * self.sigmas) ** 2 + 1e-9)  # from formula
         e = d / ((2 * self.sigmas).pow(2) * (area + 1e-9) * 2)  # from cocoeval
         return (kpt_loss_factor.view(-1, 1) * ((1 - torch.exp(-e)) * kpt_mask)).mean()
-
+    
 
 class HuberLoss(nn.Module):
     def __init__(self, c = 0.03):
@@ -202,9 +202,9 @@ class HuberLoss(nn.Module):
         error = y_true - y_pred
         abs_error = torch.abs(error)
         mask = abs_error < self.c
-        berhu_loss = torch.where(mask, abs_error, (error ** 2 + self.c ** 2) / (2 * self.c))
-        return torch.mean(berhu_loss)
-
+        huber_loss = torch.where(mask, abs_error, (error ** 2 + self.c ** 2) / (2 * self.c))
+        return torch.mean(huber_loss)
+    
 
 class BerhuLoss(nn.Module):
     def __init__(self, c = 2):
@@ -229,14 +229,10 @@ class v8DetectionLoss:
 
         m = model.model[-1]  # Detect() module
         self.bce = nn.BCEWithLogitsLoss(reduction="none")
-        self.mse = nn.MSELoss()
-        self.huber = HuberLoss()
-        # self.huber = nn.HuberLoss(delta=1.0) # you also need to change dist loss gain
-        self.berhu = BerhuLoss()
         self.hyp = h
         self.stride = m.stride  # model strides
         self.nc = m.nc  # number of classes
-        self.no = m.nc + m.reg_max * 4 + 1
+        self.no = m.nc + m.reg_max * 4
         self.reg_max = m.reg_max
         self.device = device
 
@@ -274,15 +270,14 @@ class v8DetectionLoss:
 
     def __call__(self, preds: Any, batch: dict[str, torch.Tensor]) -> tuple[torch.Tensor, torch.Tensor]:
         """Calculate the sum of the loss for box, cls and dfl multiplied by batch size."""
-        loss = torch.zeros(4, device=self.device)  # box, cls, dfl
+        loss = torch.zeros(3, device=self.device)  # box, cls, dfl
         feats = preds[1] if isinstance(preds, tuple) else preds
-        pred_distri, pred_scores, pred_dist = torch.cat([xi.view(feats[0].shape[0], self.no, -1) for xi in feats], 2).split(
-            (self.reg_max * 4, self.nc, 1), 1
+        pred_distri, pred_scores = torch.cat([xi.view(feats[0].shape[0], self.no, -1) for xi in feats], 2).split(
+            (self.reg_max * 4, self.nc), 1
         )
 
         pred_scores = pred_scores.permute(0, 2, 1).contiguous()
         pred_distri = pred_distri.permute(0, 2, 1).contiguous()
-        pred_dist = pred_dist.permute(0, 2, 1).contiguous()
 
         dtype = pred_scores.dtype
         batch_size = pred_scores.shape[0]
@@ -290,10 +285,9 @@ class v8DetectionLoss:
         anchor_points, stride_tensor = make_anchors(feats, self.stride, 0.5)
 
         # Targets
-        batch["dist"] = batch["dist"].to(batch["cls"].device)
-        targets = torch.cat((batch["batch_idx"].view(-1, 1), batch["cls"].view(-1, 1), batch["bboxes"], batch["dist"].view(-1, 1)), 1)
+        targets = torch.cat((batch["batch_idx"].view(-1, 1), batch["cls"].view(-1, 1), batch["bboxes"]), 1)
         targets = self.preprocess(targets, batch_size, scale_tensor=imgsz[[1, 0, 1, 0]])
-        gt_labels, gt_bboxes, gt_dist = targets.split((1, 4, 1), 2)
+        gt_labels, gt_bboxes = targets.split((1, 4), 2)  # cls, xyxy
         mask_gt = gt_bboxes.sum(2, keepdim=True).gt_(0.0)
 
         # Pboxes
@@ -301,7 +295,7 @@ class v8DetectionLoss:
         # dfl_conf = pred_distri.view(batch_size, -1, 4, self.reg_max).detach().softmax(-1)
         # dfl_conf = (dfl_conf.amax(-1).mean(-1) + dfl_conf.amax(-1).amin(-1)) / 2
 
-        _, target_bboxes, target_scores, fg_mask, _, target_dist = self.assigner(
+        _, target_bboxes, target_scores, fg_mask, _ = self.assigner(
             # pred_scores.detach().sigmoid() * 0.8 + dfl_conf.unsqueeze(-1) * 0.2,
             pred_scores.detach().sigmoid(),
             (pred_bboxes.detach() * stride_tensor).type(gt_bboxes.dtype),
@@ -309,7 +303,6 @@ class v8DetectionLoss:
             gt_labels,
             gt_bboxes,
             mask_gt,
-            gt_dist,
         )
 
         target_scores_sum = max(target_scores.sum(), 1)
@@ -330,15 +323,9 @@ class v8DetectionLoss:
                 fg_mask,
             )
 
-        #target_dist = target_dist.unsqueeze(2)
-        target_dist = (target_dist/60).unsqueeze(2)
-        #loss[3] = self.mse(pred_dist,target_dist)
-        loss[3] = self.huber(pred_dist, target_dist)
-
         loss[0] *= self.hyp.box  # box gain
         loss[1] *= self.hyp.cls  # cls gain
         loss[2] *= self.hyp.dfl  # dfl gain
-        loss[3] *= self.hyp.dis
 
         return loss * batch_size, loss.detach()  # loss(box, cls, dfl)
 
@@ -814,7 +801,100 @@ class v8OBBLoss(v8DetectionLoss):
             b, a, c = pred_dist.shape  # batch, anchors, channels
             pred_dist = pred_dist.view(b, a, 4, c // 4).softmax(3).matmul(self.proj.type(pred_dist.dtype))
         return torch.cat((dist2rbox(pred_dist, pred_angle, anchor_points), pred_angle), dim=-1)
+    
 
+class v8DistLoss(v8DetectionLoss):
+    def __init__(self, model):
+        super().__init__(model)
+        self.no += 1 # add one for distance prediction
+        self.mse = nn.MSELoss()
+        self.huber = HuberLoss()
+        # self.huber = nn.HuberLoss(delta=1.0) # you also need to change dist loss gain
+
+    def __call__(self, preds: Any, batch: dict[str, torch.Tensor]) -> tuple[torch.Tensor, torch.Tensor]:
+        """Calculate the sum of the loss for box, cls and dfl multiplied by batch size."""
+        loss = torch.zeros(4, device=self.device)  # box, cls, dfl
+        feats = preds[1] if isinstance(preds, tuple) else preds
+        pred_distri, pred_scores, pred_dist = torch.cat([xi.view(feats[0].shape[0], self.no, -1) for xi in feats], 2).split(
+            (self.reg_max * 4, self.nc, 1), 1
+        )
+
+        pred_scores = pred_scores.permute(0, 2, 1).contiguous()
+        pred_distri = pred_distri.permute(0, 2, 1).contiguous()
+        pred_dist = pred_dist.permute(0, 2, 1).contiguous()
+
+        dtype = pred_scores.dtype
+        batch_size = pred_scores.shape[0]
+        imgsz = torch.tensor(feats[0].shape[2:], device=self.device, dtype=dtype) * self.stride[0]  # image size (h,w)
+        anchor_points, stride_tensor = make_anchors(feats, self.stride, 0.5)
+
+        # Targets
+        targets = torch.cat((batch["batch_idx"].view(-1, 1), batch["cls"].view(-1, 1), batch["bboxes"], batch["dist"].view(-1, 1)), 1)
+        targets = self.preprocess(targets, batch_size, scale_tensor=imgsz[[1, 0, 1, 0]])
+        gt_labels, gt_bboxes, gt_dist = targets.split((1, 4, 1), 2)
+        mask_gt = gt_bboxes.sum(2, keepdim=True).gt_(0.0)
+
+        # Pboxes
+        pred_bboxes = self.bbox_decode(anchor_points, pred_distri)  # xyxy, (b, h*w, 4)
+        # dfl_conf = pred_distri.view(batch_size, -1, 4, self.reg_max).detach().softmax(-1)
+        # dfl_conf = (dfl_conf.amax(-1).mean(-1) + dfl_conf.amax(-1).amin(-1)) / 2
+
+        _, target_bboxes, target_scores, fg_mask, target_gt_idx = self.assigner(
+            # pred_scores.detach().sigmoid() * 0.8 + dfl_conf.unsqueeze(-1) * 0.2,
+            pred_scores.detach().sigmoid(),
+            (pred_bboxes.detach() * stride_tensor).type(gt_bboxes.dtype),
+            anchor_points * stride_tensor,
+            gt_labels,
+            gt_bboxes,
+            mask_gt
+        )
+
+        target_scores_sum = max(target_scores.sum(), 1)
+
+        # Cls loss
+        # loss[1] = self.varifocal_loss(pred_scores, target_scores, target_labels) / target_scores_sum  # VFL way
+        loss[1] = self.bce(pred_scores, target_scores.to(dtype)).sum() / target_scores_sum  # BCE
+
+        # Bbox loss
+        if fg_mask.sum():
+            loss[0], loss[2] = self.bbox_loss(
+                pred_distri,
+                pred_bboxes,
+                anchor_points,
+                target_bboxes / stride_tensor,
+                target_scores,
+                target_scores_sum,
+                fg_mask,
+            )
+
+        n_max_boxes = gt_bboxes.shape[1]
+        loss[3] = self.calculate_distance_loss(pred_dist, gt_dist, target_gt_idx, n_max_boxes)
+
+        loss[0] *= self.hyp.box  # box gain
+        loss[1] *= self.hyp.cls  # cls gain
+        loss[2] *= self.hyp.dfl  # dfl gain
+        loss[3] *= self.hyp.dis
+
+        return loss * batch_size, loss.detach()  # loss(box, cls, dfl)
+    
+    def calculate_distance_loss(
+        self,
+        pred_distances: torch.Tensor, # predicted distances [b, 8400, 1]
+        gt_distances: torch.Tensor,   # GT distances [num_obj, 3]
+        target_gt_idx: torch.Tensor,  # targets object index [b, 8400]
+        n_max_boxes: int              # max number of boxes per batch
+    ) -> torch.Tensor:
+        bs = gt_distances.shape[0]
+        batch_ind = torch.arange(end=bs, dtype=torch.int64, device=gt_distances.device)[..., None]
+        target_gt_idx = target_gt_idx + batch_ind * n_max_boxes  # (b, h*w)
+
+        target_dist = gt_distances.flatten()[target_gt_idx]
+        target_dist = (target_dist / 60).unsqueeze(2)
+
+        dist_loss = self.huber(pred_distances, target_dist)
+
+        return dist_loss
+    
 
 class E2EDetectLoss:
     """Criterion class for computing training losses for end-to-end detection."""
