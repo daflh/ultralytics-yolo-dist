@@ -799,11 +799,10 @@ class v8DistLoss(v8DetectionLoss):
         # self.huber = nn.HuberLoss(delta=1.0) # you also need to change dist loss gain
 
     def __call__(self, preds: Any, batch: dict[str, torch.Tensor]) -> tuple[torch.Tensor, torch.Tensor]:
-        """Calculate the sum of the loss for box, cls and dfl multiplied by batch size."""
-        loss = torch.zeros(4, device=self.device)  # box, cls, dfl
-        feats = preds[1] if isinstance(preds, tuple) else preds
-        pred_distri, pred_scores, pred_dist = torch.cat([xi.view(feats[0].shape[0], self.no, -1) for xi in feats], 2).split(
-            (self.reg_max * 4, self.nc, 1), 1
+        loss = torch.zeros(4, device=self.device)  # box, cls, dfl, dist
+        feats, pred_dist = preds if isinstance(preds[0], list) else preds[1]
+        pred_distri, pred_scores = torch.cat([xi.view(feats[0].shape[0], self.no, -1) for xi in feats], 2).split(
+            (self.reg_max * 4, self.nc), 1
         )
 
         pred_scores = pred_scores.permute(0, 2, 1).contiguous()
@@ -816,7 +815,7 @@ class v8DistLoss(v8DetectionLoss):
         anchor_points, stride_tensor = make_anchors(feats, self.stride, 0.5)
 
         # Targets
-        targets = torch.cat((batch["batch_idx"].view(-1, 1), batch["cls"].view(-1, 1), batch["bboxes"], batch["dist"].view(-1, 1)), 1)
+        targets = torch.cat((batch["batch_idx"].view(-1, 1), batch["cls"].view(-1, 1), batch["bboxes"], batch["distances"].view(-1, 1)), 1)
         targets = self.preprocess(targets, batch_size, scale_tensor=imgsz[[1, 0, 1, 0]])
         gt_labels, gt_bboxes, gt_dist = targets.split((1, 4, 1), 2)
         mask_gt = gt_bboxes.sum(2, keepdim=True).gt_(0.0)

@@ -26,12 +26,12 @@ def main():
     # model.load(weights="../weights/yolo11n.pt")
     # model.load(weights="../weights/yolo11n_KITTI_pretrained_ep600.pt")
     # model.load(weights="../runs/dist/train129/weights/best.pt")
-    model.load(weights="./best.pt")
+    # model.load(weights="./best.pt")
     
     # results = model.train(data=dataset_path + "/coco8.yaml", epochs=5, imgsz=640)
     # results = model.train(data=dataset_path + "/coco8-dist.yaml", epochs=5, imgsz=640)
-    # results = model.train(data=dataset_path + "/KITTI.yaml", epochs=5, imgsz=640, workers=4, classes=[0,1,2,3,4,5,6])
-    # results = model.train(data=dataset_path + "/dota8.yaml", epochs=5, imgsz=640)
+    # results = model.train(data=dataset_path + "/KITTI.yaml", epochs=5, imgsz=640, classes=[0,1,2,3,4,5,6])
+    results = model.train(data=dataset_path + "/KITTI.yaml", epochs=300, imgsz=640, batch=32, workers=12, classes=[0,1,2,3,4,5,6])
     # results = model.train(data=dataset_path + "/coco8-pose.yaml", epochs=5, imgsz=640)
     # print(results)
 
@@ -44,9 +44,8 @@ def main():
     # detect_objects(model, "../datasets/005992.png")
     # detect_objects(model, "../datasets/000007.png")
     # detect_objects(model, "../datasets/new-york.mp4")
-    detect_objects(model, "../datasets/kitti-track-video/0014.mp4", 10)
+    # detect_objects(model, "../datasets/kitti-track-video/0014.mp4", 10)
     # detect_objects(model, "../datasets/kitti-sequence2.mp4")
-
 
     # model.info(verbose=True, detailed=True)
     # summary(model.model, input_size=(1, 3, 640, 640))
