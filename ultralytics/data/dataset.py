@@ -135,7 +135,8 @@ class YOLODataset(BaseDataset):
                             "im_file": im_file,
                             "shape": shape,
                             "cls": lb[:, 0:1],  # n, 1
-                            "bboxes": lb[:, 1:],  # n, 4
+                            "bboxes": lb[:, 1:-1],  # n, 4
+                            "dist": lb[:, -1:],
                             "segments": segments,
                             "keypoints": keypoint,
                             "normalized": True,
@@ -581,7 +582,6 @@ class GroundingDataset(YOLODataset):
                     "shape": (h, w),
                     "cls": lb[:, 0:1],  # n, 1
                     "bboxes": lb[:, 1:-1],  # n, 4
-                    "dist": lb[:, -1:],
                     "segments": segments,
                     "normalized": True,
                     "bbox_format": "xywh",

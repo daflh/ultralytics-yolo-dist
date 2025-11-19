@@ -9,13 +9,14 @@ dataset_path = '/home/ugm/Documents/zherk/datasets'
 def on_epoch_end(trainer):
     ep = trainer.epoch + 1
     eps = trainer.epochs
-    if ep == 1 or ep % 50 == 0 or ep == eps:
+    # if ep == 1 or ep % 50 == 0 or ep == eps:
+    if ep % 50 == 0 or ep == eps:
         requests.post("https://api.daflh.dev/telegram/sendMessage", json={"message": f"Epoch {ep} of {eps} done"})
 
 def main():
     model = YOLO("yolo11n.yaml")
 
-    # model.add_callback("on_train_epoch_end", on_epoch_end)
+    model.add_callback("on_train_epoch_end", on_epoch_end)
 
     # model.load(weights="./yolov8n.pt")
     # model.load(weights="./best.pt")
