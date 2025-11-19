@@ -193,6 +193,19 @@ class KeypointLoss(nn.Module):
         return (kpt_loss_factor.view(-1, 1) * ((1 - torch.exp(-e)) * kpt_mask)).mean()
 
 
+class HuberLoss(nn.Module):
+    def __init__(self, c = 0.03):
+        super(HuberLoss, self).__init__()
+        self.c = c
+
+    def forward(self, y_true, y_pred):
+        error = y_true - y_pred
+        abs_error = torch.abs(error)
+        mask = abs_error < self.c
+        huber_loss = torch.where(mask, abs_error, (error ** 2 + self.c ** 2) / (2 * self.c))
+        return torch.mean(huber_loss)
+
+
 class v8DetectionLoss:
     """Criterion class for computing training losses for YOLOv8 object detection."""
 
@@ -775,127 +788,100 @@ class v8OBBLoss(v8DetectionLoss):
             b, a, c = pred_dist.shape  # batch, anchors, channels
             pred_dist = pred_dist.view(b, a, 4, c // 4).softmax(3).matmul(self.proj.type(pred_dist.dtype))
         return torch.cat((dist2rbox(pred_dist, pred_angle, anchor_points), pred_angle), dim=-1)
-    
 
-class HuberLoss(nn.Module):
-    def __init__(self, c = 0.03):
-        super(HuberLoss, self).__init__()
-        self.c = c
-
-    def forward(self, y_true, y_pred):
-        error = y_true - y_pred
-        abs_error = torch.abs(error)
-        mask = abs_error < self.c
-        huber_loss = torch.where(mask, abs_error, (error ** 2 + self.c ** 2) / (2 * self.c))
-        return torch.mean(huber_loss)
-    
 
 class v8DistLoss(v8DetectionLoss):
     def __init__(self, model):
         super().__init__(model)
+        self.no += 1 # add one for distance prediction
         self.mse = nn.MSELoss()
-        self.huber = HuberLoss() # TODO: pake torch.nn.HuberLoss, coba SmoothL1Loss?
+        self.huber = HuberLoss()
+        # self.huber = nn.HuberLoss(delta=1.0) # you also need to change dist loss gain
 
     def __call__(self, preds: Any, batch: dict[str, torch.Tensor]) -> tuple[torch.Tensor, torch.Tensor]:
-        loss = torch.zeros(4, device=self.device)  # box, dist, cls, dfl
-        feats, pred_dist = preds if isinstance(preds[0], list) else preds[1] # [[1, 80+64, 80, 80], ...], [1, 1, 8400]
-        pred_distri, pred_scores = torch.cat([xi.view(feats[0].shape[0], self.no, -1) for xi in feats], 2).split(
-            (self.reg_max * 4, self.nc), 1
+        """Calculate the sum of the loss for box, cls and dfl multiplied by batch size."""
+        loss = torch.zeros(4, device=self.device)  # box, cls, dfl
+        feats = preds[1] if isinstance(preds, tuple) else preds
+        pred_distri, pred_scores, pred_dist = torch.cat([xi.view(feats[0].shape[0], self.no, -1) for xi in feats], 2).split(
+            (self.reg_max * 4, self.nc, 1), 1
         )
 
-        # B, grids, ..
-        pred_scores = pred_scores.permute(0, 2, 1).contiguous() # [b, 8400, 80]
-        pred_distri = pred_distri.permute(0, 2, 1).contiguous() # [b, 8400, 64]
-        pred_dist = pred_dist.permute(0, 2, 1).contiguous() # [b, 8400, 1]
+        pred_scores = pred_scores.permute(0, 2, 1).contiguous()
+        pred_distri = pred_distri.permute(0, 2, 1).contiguous()
+        pred_dist = pred_dist.permute(0, 2, 1).contiguous()
 
         dtype = pred_scores.dtype
+        batch_size = pred_scores.shape[0]
         imgsz = torch.tensor(feats[0].shape[2:], device=self.device, dtype=dtype) * self.stride[0]  # image size (h,w)
-        anchor_points, stride_tensor = make_anchors(feats, self.stride, 0.5) # [8400, 2], [8400, 1]
+        anchor_points, stride_tensor = make_anchors(feats, self.stride, 0.5)
 
         # Targets
-        batch_size = pred_scores.shape[0]
-        batch_idx = batch["batch_idx"].view(-1, 1)
-        targets = torch.cat((batch_idx, batch["cls"].view(-1, 1), batch["bboxes"]), 1)
-        targets = self.preprocess(targets, batch_size, scale_tensor=imgsz[[1, 0, 1, 0]]) # scale bboxes to image size, out: [b, max_obj, 5]
-        gt_labels, gt_bboxes = targets.split((1, 4), 2)
+        targets = torch.cat((batch["batch_idx"].view(-1, 1), batch["cls"].view(-1, 1), batch["bboxes"], batch["dist"].view(-1, 1)), 1)
+        targets = self.preprocess(targets, batch_size, scale_tensor=imgsz[[1, 0, 1, 0]])
+        gt_labels, gt_bboxes, gt_dist = targets.split((1, 4, 1), 2)
         mask_gt = gt_bboxes.sum(2, keepdim=True).gt_(0.0)
 
         # Pboxes
         pred_bboxes = self.bbox_decode(anchor_points, pred_distri)  # xyxy, (b, h*w, 4)
+        # dfl_conf = pred_distri.view(batch_size, -1, 4, self.reg_max).detach().softmax(-1)
+        # dfl_conf = (dfl_conf.amax(-1).mean(-1) + dfl_conf.amax(-1).amin(-1)) / 2
 
         _, target_bboxes, target_scores, fg_mask, target_gt_idx = self.assigner(
+            # pred_scores.detach().sigmoid() * 0.8 + dfl_conf.unsqueeze(-1) * 0.2,
             pred_scores.detach().sigmoid(),
             (pred_bboxes.detach() * stride_tensor).type(gt_bboxes.dtype),
             anchor_points * stride_tensor,
             gt_labels,
             gt_bboxes,
-            mask_gt,
+            mask_gt
         )
 
         target_scores_sum = max(target_scores.sum(), 1)
 
         # Cls loss
-        loss[2] = self.bce(pred_scores, target_scores.to(dtype)).sum() / target_scores_sum  # BCE
+        # loss[1] = self.varifocal_loss(pred_scores, target_scores, target_labels) / target_scores_sum  # VFL way
+        loss[1] = self.bce(pred_scores, target_scores.to(dtype)).sum() / target_scores_sum  # BCE
 
         # Bbox loss
         if fg_mask.sum():
-            target_bboxes /= stride_tensor
-            loss[0], loss[3] = self.bbox_loss(
-                pred_distri, pred_bboxes, anchor_points, target_bboxes, target_scores, target_scores_sum, fg_mask
+            loss[0], loss[2] = self.bbox_loss(
+                pred_distri,
+                pred_bboxes,
+                anchor_points,
+                target_bboxes / stride_tensor,
+                target_scores,
+                target_scores_sum,
+                fg_mask,
             )
 
-            distances = batch["distances"].to(self.device).float().clone()
-            # distances = distances.unsqueeze(0) # [b, obj, 3]
-            loss[1] = self.calculate_distance_loss(
-                pred_dist, fg_mask, target_gt_idx, distances, batch_idx
-            )
+        n_max_boxes = gt_bboxes.shape[1]
+        loss[3] = self.calculate_distance_loss(pred_dist, gt_dist, target_gt_idx, n_max_boxes)
 
         loss[0] *= self.hyp.box  # box gain
-        loss[1] *= self.hyp.dist # dist gain
-        loss[2] *= self.hyp.cls  # cls gain
-        loss[3] *= self.hyp.dfl  # dfl gain
+        loss[1] *= self.hyp.cls  # cls gain
+        loss[2] *= self.hyp.dfl  # dfl gain
+        loss[3] *= self.hyp.dist
 
-        return loss * batch_size, loss.detach()  # loss(box, dist, cls, dfl)
+        return loss * batch_size, loss.detach()
 
     def calculate_distance_loss(
         self,
         pred_distances: torch.Tensor, # predicted distances [b, 8400, 1]
-        masks: torch.Tensor, # targets foreground masks: (True, False) [b, 8400]
-        target_gt_idx: torch.Tensor, # targets object index [b, 8400]
-        distances: torch.Tensor, # GT distances [num_obj, 3]
-        batch_idx: torch.Tensor, # [num_obj, 1]
+        gt_distances: torch.Tensor,   # GT distances [num_obj, 3]
+        target_gt_idx: torch.Tensor,  # targets object index [b, 8400]
+        n_max_boxes: int              # max number of boxes per batch
     ) -> torch.Tensor:
-        batch_idx = batch_idx.flatten()
-        batch_size = len(masks)
-        device = pred_distances.device
+        bs = gt_distances.shape[0]
+        batch_ind = torch.arange(end=bs, dtype=torch.int64, device=gt_distances.device)[..., None]
+        target_gt_idx = target_gt_idx + batch_ind * n_max_boxes  # (b, h*w)
 
-        # prepare batched GT distances [BS, max_obj, 1]
-        max_obj = torch.unique(batch_idx, return_counts=True)[1].max()
-        # z_distances = torch.linalg.norm(distances, dim=-1, keepdim=True)
-        z_distances = distances[..., 2].unsqueeze(-1) # TODO: euclidean distance
-        batched_dist = torch.zeros((batch_size, max_obj, 1), device=device)
-        for i in range(batch_size): # loop through batch/image
-            dist_i = z_distances[batch_idx == i]
-            batched_dist[i, :dist_i.shape[0]] = dist_i
+        target_dist = gt_distances.flatten()[target_gt_idx]
+        target_dist = (target_dist / 60).unsqueeze(2)
 
-        # select GT distances using mapping target_gt_idx
-        gt_idx_exp = target_gt_idx.unsqueeze(-1)
-        selected_gt_dist = batched_dist.gather(1, gt_idx_exp.expand(-1, -1, 1))
-
-        # # L2 loss between prediction and ground truth
-        # diff = (pred_distances - selected_gt_dist)
-        # dist_loss = (diff[masks] ** 2).mean() if masks.any() else torch.tensor(0.0, device=device)
-
-        if masks.any():
-            pred_sel = pred_distances[masks]
-            gt_sel = selected_gt_dist[masks]
-            # dist_loss = self.mse(gt_sel, pred_sel)
-            dist_loss = self.huber(gt_sel, pred_sel)
-        else:
-            dist_loss = torch.tensor(0.0, device=device, dtype=pred_distances.dtype)
+        dist_loss = self.huber(pred_distances, target_dist)
 
         return dist_loss
-        
+    
 
 class E2EDetectLoss:
     """Criterion class for computing training losses for end-to-end detection."""

@@ -44,7 +44,7 @@ def detect_objects(model, input_path, target_fps = 24):
 
             # Annotate results
             annotated_frame = results[0].plot()
-            print(results[0].distances)
+            # print(results[0].distances)
 
             # Compute FPS
             infer_time = time.time() - frame_start
