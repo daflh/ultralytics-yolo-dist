@@ -1657,6 +1657,7 @@ class DistMetrics(DetMetrics):
             
             # mean MAE/MRE
             if sel.sum() > 0:
+                # TODO: fix don't take account err == -1
                 err = np.abs(pred_dist[sel] - target_dist[sel])
                 self._dist_mae = float(np.mean(err))
                 denom = np.abs(target_dist[sel]) + 1e-9

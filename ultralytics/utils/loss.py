@@ -870,14 +870,11 @@ class v8DistLoss(v8DetectionLoss):
         target_gt_idx: torch.Tensor,  # targets object index [b, 8400]
         n_max_boxes: int              # max number of boxes per batch
     ) -> torch.Tensor:
-        max_dist = 100.0 # prev: 60.0
         bs = gt_distances.shape[0]
         batch_ind = torch.arange(end=bs, dtype=torch.int64, device=gt_distances.device)[..., None]
         target_gt_idx = target_gt_idx + batch_ind * n_max_boxes  # (b, h*w)
 
-        target_dist = gt_distances.flatten()[target_gt_idx]
-        target_dist = (target_dist / max_dist).unsqueeze(2) # TODO: WHY IT'S DIVIDED BY 60
-
+        target_dist = gt_distances.flatten().unsqueeze(2)[target_gt_idx]
         dist_loss = self.huber(pred_distances, target_dist)
 
         return dist_loss

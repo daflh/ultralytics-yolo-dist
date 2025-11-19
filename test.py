@@ -25,6 +25,7 @@ def main():
 
     # model.load(weights="../weights/yolo11n.pt")
     # model.load(weights="../weights/yolo11n_KITTI_pretrained_ep600.pt")
+    # model.load(weights="../weights/yolov11n-distance_KITTI_ep300.pt")
     # model.load(weights="../runs/dist/train129/weights/best.pt")
     # model.load(weights="./best.pt")
     
