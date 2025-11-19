@@ -284,7 +284,7 @@ class Results(SimpleClass, DataExportMixin):
         self.probs = Probs(probs) if probs is not None else None
         self.keypoints = Keypoints(keypoints, self.orig_shape) if keypoints is not None else None
         self.obb = OBB(obb, self.orig_shape) if obb is not None else None
-        self.distances = distances if distances is not None else None
+        self.distances = distances if distances is not None else None # TODO: create Dists class
         self.speed = speed if speed is not None else {"preprocess": None, "inference": None, "postprocess": None}
         self.names = names
         self.path = path
@@ -577,7 +577,7 @@ class Results(SimpleClass, DataExportMixin):
                 name = ("" if id is None else f"id:{id} ") + names[c]
                 if labels:
                     if pred_dists is not None and show_dists:
-                        dist = pred_dists.data[i].cpu().numpy()
+                        dist = pred_dists.data[i].cpu().numpy() # TODO: multiply with max_dist?
                         label = f"{name} {d_conf:.2f} {dist:.2f}m" if conf else f"{name} {dist:.2f}m"
                     else:
                         label = f"{name} {d_conf:.2f}" if conf else name
@@ -704,7 +704,11 @@ class Results(SimpleClass, DataExportMixin):
             return f"{', '.join(f'{self.names[j]} {self.probs.data[j]:.2f}' for j in self.probs.top5)}, "
         if boxes:
             counts = boxes.cls.int().bincount()
-            return "".join(f"{n} {self.names[i]}{'s' * (n > 1)}, " for i, n in enumerate(counts) if n > 0)
+            try:
+                log_str = "".join(f"{n} {self.names[i]}{'s' * (n > 1)}, " for i, n in enumerate(counts) if n > 0)
+            except:
+                log_str = "".join(f"{n} {i}{'s' * (n > 1)}, " for i, n in enumerate(counts) if n > 0)
+            return log_str
 
     def save_txt(self, txt_file: str | Path, save_conf: bool = False) -> str:
         """

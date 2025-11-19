@@ -793,7 +793,6 @@ class v8OBBLoss(v8DetectionLoss):
 class v8DistLoss(v8DetectionLoss):
     def __init__(self, model):
         super().__init__(model)
-        self.no += 1 # add one for distance prediction
         self.mse = nn.MSELoss()
         self.huber = HuberLoss()
         # self.huber = nn.HuberLoss(delta=1.0) # you also need to change dist loss gain
@@ -815,7 +814,8 @@ class v8DistLoss(v8DetectionLoss):
         anchor_points, stride_tensor = make_anchors(feats, self.stride, 0.5)
 
         # Targets
-        targets = torch.cat((batch["batch_idx"].view(-1, 1), batch["cls"].view(-1, 1), batch["bboxes"], batch["distances"].view(-1, 1)), 1)
+        distances = batch["distances"][:, 2] # TODO: use euclidean distance (can be switched)
+        targets = torch.cat((batch["batch_idx"].view(-1, 1), batch["cls"].view(-1, 1), batch["bboxes"], distances.view(-1, 1)), 1)
         targets = self.preprocess(targets, batch_size, scale_tensor=imgsz[[1, 0, 1, 0]])
         gt_labels, gt_bboxes, gt_dist = targets.split((1, 4, 1), 2)
         mask_gt = gt_bboxes.sum(2, keepdim=True).gt_(0.0)
@@ -870,12 +870,13 @@ class v8DistLoss(v8DetectionLoss):
         target_gt_idx: torch.Tensor,  # targets object index [b, 8400]
         n_max_boxes: int              # max number of boxes per batch
     ) -> torch.Tensor:
+        max_dist = 100.0 # prev: 60.0
         bs = gt_distances.shape[0]
         batch_ind = torch.arange(end=bs, dtype=torch.int64, device=gt_distances.device)[..., None]
         target_gt_idx = target_gt_idx + batch_ind * n_max_boxes  # (b, h*w)
 
         target_dist = gt_distances.flatten()[target_gt_idx]
-        target_dist = (target_dist / 60).unsqueeze(2)
+        target_dist = (target_dist / max_dist).unsqueeze(2) # TODO: WHY IT'S DIVIDED BY 60
 
         dist_loss = self.huber(pred_distances, target_dist)
 
