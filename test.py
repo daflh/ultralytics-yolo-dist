@@ -1,0 +1,45 @@
+import requests
+from ultralytics import YOLO
+from torchinfo import summary
+from test_utils import detect_objects
+
+# dataset_path = 'D:\\UGM\\tugas akhir\\3. skripsi\\code\\datasets'
+dataset_path = '/home/ugm/Documents/zherk/datasets'
+
+def on_epoch_end(trainer):
+    ep = trainer.epoch + 1
+    eps = trainer.epochs
+    if ep == 1 or ep % 50 == 0 or ep == eps:
+        requests.post("https://api.daflh.dev/telegram/sendMessage", json={"message": f"Epoch {ep} of {eps} done"})
+
+def main():
+    model = YOLO("yolo11n.yaml")
+
+    # model.add_callback("on_train_epoch_end", on_epoch_end)
+
+    # model.load(weights="./yolov8n.pt")
+    # model.load(weights="./best.pt")
+
+    # results = model.train(data=dataset_path + "/coco8.yaml", epochs=5, imgsz=640)
+    # results = model.train(data=dataset_path + "/coco8-dist.yaml", epochs=5, imgsz=640)
+    # results = model.train(data=dataset_path + "/KITTI.yaml", epochs=5, imgsz=640, classes=[0,1,2,3,4,5,6])
+    results = model.train(data=dataset_path + "/KITTI.yaml", epochs=300, imgsz=640, batch=32, workers=12, cache=False, classes=[0,1,2,3,4,5,6])
+    # print(results)
+
+    # metrics = model.val(data=dataset_path + "/coco8.yaml", imgsz=640, batch=16, conf=0.25, iou=0.6)
+    # metrics = model.val(data=dataset_path + "/coco8-dist.yaml", imgsz=640, batch=16, conf=0.25, iou=0.6)
+    # metrics = model.val(data=dataset_path + "/KITTI.yaml", imgsz=640, batch=16, conf=0.25, iou=0.6)
+    # print(metrics)
+
+    # detect_objects(model, "../datasets/street.jpg")
+    # detect_objects(model, "../datasets/005992.png")
+    # detect_objects(model, "../datasets/000007.png")
+    # detect_objects(model, "../datasets/new-york.mp4")
+    # detect_objects(model, "../datasets/kitti-sequence2.mp4")
+
+    # model.info(verbose=True, detailed=True)
+    # summary(model.model, input_size=(1, 3, 640, 640))
+
+if __name__ == "__main__":
+    main()
+    

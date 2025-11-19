@@ -441,6 +441,14 @@ class BasePredictor:
         result.save_dir = self.save_dir.__str__()  # used in other locations
         string += f"{result.verbose()}{result.speed['inference']:.1f}ms"
 
+        #recover log space
+        #distances = torch.exp(result.boxes.dist).tolist()
+
+        distances = (result.boxes.dist*60).tolist()
+        distances = map(lambda num: f"{num*3:.2f}", distances)
+        #breakpoint()
+        string = string + "\ndistances:\n" + " ".join(distances)
+
         # Add predictions to image
         if self.args.save or self.args.show:
             self.plotted_img = result.plot(
@@ -449,6 +457,7 @@ class BasePredictor:
                 conf=self.args.show_conf,
                 labels=self.args.show_labels,
                 im_gpu=None if self.args.retina_masks else im[i],
+                name = self.txt_path.name
             )
 
         # Save results

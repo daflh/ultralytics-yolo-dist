@@ -77,7 +77,7 @@ class Detect(nn.Module):
     legacy = False  # backward compatibility for v3/v5/v8/v9 models
     xyxy = False  # xyxy or xywh output
 
-    def __init__(self, nc: int = 80, ch: tuple = ()):
+    def __init__(self, nc: int = 9, ch: tuple = ()):
         """
         Initialize the YOLO detection layer with specified number of classes and channels.
 
@@ -89,9 +89,10 @@ class Detect(nn.Module):
         self.nc = nc  # number of classes
         self.nl = len(ch)  # number of detection layers
         self.reg_max = 16  # DFL channels (ch[0] // 16 to scale 4/8/12/16/20 for n/s/m/l/x)
-        self.no = nc + self.reg_max * 4  # number of outputs per anchor
+        self.no = nc + 1 + self.reg_max * 4  # number of outputs per anchor
         self.stride = torch.zeros(self.nl)  # strides computed during build
         c2, c3 = max((16, ch[0] // 4, self.reg_max * 4)), max(ch[0], min(self.nc, 100))  # channels
+        c4 = 64 # max(ch[0] // 4, 4)
         self.cv2 = nn.ModuleList(
             nn.Sequential(Conv(x, c2, 3), Conv(c2, c2, 3), nn.Conv2d(c2, 4 * self.reg_max, 1)) for x in ch
         )
@@ -107,6 +108,17 @@ class Detect(nn.Module):
                 for x in ch
             )
         )
+        self.cv5 = nn.ModuleList(nn.Sequential(nn.Conv2d(x, 64, 1), nn.ReLU(), nn.Conv2d(64, 32, 1), nn.ReLU(), nn.Conv2d(32, 1, 1),nn.ReLU()) for x in ch) # dist
+        # hidden_ratio = 0.25
+        # mod = []
+        # for x in ch:
+        #     hidden = max(int(x * hidden_ratio), 32)
+        #     mod.append(nn.Sequential(
+        #         nn.Conv2d(x, hidden, 3, padding=1, bias=False), nn.BatchNorm2d(hidden), nn.SiLU(inplace=True),
+        #         nn.Conv2d(hidden, hidden, 3, padding=1, bias=False), nn.BatchNorm2d(hidden), nn.SiLU(inplace=True),
+        #         nn.Conv2d(hidden, 1, 1)
+        #     ))
+        # self.cv5 = nn.ModuleList(mod)
         self.dfl = DFL(self.reg_max) if self.reg_max > 1 else nn.Identity()
 
         if self.end2end:
@@ -119,7 +131,7 @@ class Detect(nn.Module):
             return self.forward_end2end(x)
 
         for i in range(self.nl):
-            x[i] = torch.cat((self.cv2[i](x[i]), self.cv3[i](x[i])), 1)
+            x[i] = torch.cat((self.cv2[i](x[i]), self.cv3[i](x[i]), self.cv5[i](x[i])), 1)
         if self.training:  # Training path
             return x
         y = self._inference(x)
@@ -168,9 +180,10 @@ class Detect(nn.Module):
 
         if self.export and self.format in {"saved_model", "pb", "tflite", "edgetpu", "tfjs"}:  # avoid TF FlexSplitV ops
             box = x_cat[:, : self.reg_max * 4]
-            cls = x_cat[:, self.reg_max * 4 :]
+            cls = x_cat[:, self.reg_max * 4 :-1]
+            dis = x_cat[:, -1]
         else:
-            box, cls = x_cat.split((self.reg_max * 4, self.nc), 1)
+            box, cls, dis = x_cat.split((self.reg_max * 4, self.nc, 1), 1)
 
         if self.export and self.format in {"tflite", "edgetpu"}:
             # Precompute normalization factor to increase numerical stability
@@ -182,7 +195,7 @@ class Detect(nn.Module):
             dbox = self.decode_bboxes(self.dfl(box) * norm, self.anchors.unsqueeze(0) * norm[:, :2])
         else:
             dbox = self.decode_bboxes(self.dfl(box), self.anchors.unsqueeze(0)) * self.strides
-        return torch.cat((dbox, cls.sigmoid()), 1)
+        return torch.cat((dbox, cls.sigmoid(), dis), 1)
 
     def bias_init(self):
         """Initialize Detect() biases, WARNING: requires stride availability."""

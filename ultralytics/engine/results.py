@@ -492,6 +492,7 @@ class Results(SimpleClass, DataExportMixin):
         filename: str | None = None,
         color_mode: str = "class",
         txt_color: tuple[int, int, int] = (255, 255, 255),
+        name = None,
     ) -> np.ndarray:
         """
         Plot detection results on an input RGB image.
@@ -567,8 +568,11 @@ class Results(SimpleClass, DataExportMixin):
         if pred_boxes is not None and show_boxes:
             for i, d in enumerate(reversed(pred_boxes)):
                 c, d_conf, id = int(d.cls), float(d.conf) if conf else None, int(d.id.item()) if d.is_track else None
-                name = ("" if id is None else f"id:{id} ") + names[c]
-                label = (f"{name} {d_conf:.2f}" if conf else name) if labels else None
+                dist = float(d.dist)*60
+                # name = ("" if id is None else f"id:{id} ") + names[c]
+                name = names[c]
+                # label = (f"{name} {d_conf:.2f}" if conf else name) if labels else None
+                label = f"{name} {dist:.2f}" if labels else None   #/{td:.2f}" if labels else None
                 box = d.xyxyxyxy.squeeze() if is_obb else d.xyxy.squeeze()
                 annotator.box_label(
                     box,
@@ -690,7 +694,11 @@ class Results(SimpleClass, DataExportMixin):
             return f"{', '.join(f'{self.names[j]} {self.probs.data[j]:.2f}' for j in self.probs.top5)}, "
         if boxes:
             counts = boxes.cls.int().bincount()
-            return "".join(f"{n} {self.names[i]}{'s' * (n > 1)}, " for i, n in enumerate(counts) if n > 0)
+            try:
+                log_str = "".join(f"{n} {self.names[i]}{'s' * (n > 1)}, " for i, n in enumerate(counts) if n > 0)
+            except:
+                log_str = "".join(f"{n} {i}{'s' * (n > 1)}, " for i, n in enumerate(counts) if n > 0)
+            return log_str
 
     def save_txt(self, txt_file: str | Path, save_conf: bool = False) -> str:
         """
@@ -732,6 +740,7 @@ class Results(SimpleClass, DataExportMixin):
             # Detect/segment/pose
             for j, d in enumerate(boxes):
                 c, conf, id = int(d.cls), float(d.conf), int(d.id.item()) if d.is_track else None
+                dist = float(d.dist)
                 line = (c, *(d.xyxyxyxyn.view(-1) if is_obb else d.xywhn.view(-1)))
                 if masks:
                     seg = masks[j].xyn[0].copy().reshape(-1)  # reversed mask.xyn, (n,2) to (n*2)
@@ -740,6 +749,7 @@ class Results(SimpleClass, DataExportMixin):
                     kpt = torch.cat((kpts[j].xyn, kpts[j].conf[..., None]), 2) if kpts[j].has_visible else kpts[j].xyn
                     line += (*kpt.reshape(-1).tolist(),)
                 line += (conf,) * save_conf + (() if id is None else (id,))
+                line += (dist,)
                 texts.append(("%g " * len(line)).rstrip() % line)
 
         if texts:
@@ -919,7 +929,7 @@ class Boxes(BaseTensor):
         if boxes.ndim == 1:
             boxes = boxes[None, :]
         n = boxes.shape[-1]
-        assert n in {6, 7}, f"expected 6 or 7 values but got {n}"  # xyxy, track_id, conf, cls
+        assert n in {7, 8}, f"expected 7 or 8 values but got {n}"  # xyxy, track_id, conf, cls
         super().__init__(boxes, orig_shape)
         self.is_track = n == 7
         self.orig_shape = orig_shape
@@ -940,6 +950,11 @@ class Boxes(BaseTensor):
             >>> print(xyxy)
         """
         return self.data[:, :4]
+    
+    @property
+    def dist(self):
+        """Return the dists of the boxes"""
+        return self.data[:, -1]
 
     @property
     def conf(self) -> torch.Tensor | np.ndarray:
@@ -956,7 +971,7 @@ class Boxes(BaseTensor):
             >>> print(conf_scores)
             tensor([0.9000])
         """
-        return self.data[:, -2]
+        return self.data[:, -3]
 
     @property
     def cls(self) -> torch.Tensor | np.ndarray:
@@ -973,7 +988,7 @@ class Boxes(BaseTensor):
             >>> class_ids = boxes.cls
             >>> print(class_ids)  # tensor([0., 2., 1.])
         """
-        return self.data[:, -1]
+        return self.data[:, -2]
 
     @property
     def id(self) -> torch.Tensor | np.ndarray | None:
@@ -998,7 +1013,7 @@ class Boxes(BaseTensor):
             - This property is only available when tracking is enabled (i.e., when `is_track` is True).
             - The tracking IDs are typically used to associate detections across multiple frames in video analysis.
         """
-        return self.data[:, -3] if self.is_track else None
+        return self.data[:, -4] if self.is_track else None
 
     @property
     @lru_cache(maxsize=2)
