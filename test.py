@@ -35,7 +35,7 @@ def main():
     # detect_objects(model, "../datasets/street.jpg")
     # detect_objects(model, "../datasets/005992.png")
     # detect_objects(model, "../datasets/000007.png")
-    # detect_objects(model, "../datasets/new-york.mp4")
+    # detect_objects(model, "../datasets/kitti-track-video/0014.mp4", 10)
     # detect_objects(model, "../datasets/kitti-sequence2.mp4")
 
     # model.info(verbose=True, detailed=True)
