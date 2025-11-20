@@ -874,6 +874,7 @@ class v8DistLoss(v8DetectionLoss):
         bs = gt_distances.shape[0]
         batch_ind = torch.arange(end=bs, dtype=torch.int64, device=gt_distances.device)[..., None]
         target_gt_idx = target_gt_idx + batch_ind * n_max_boxes  # (b, h*w)
+        target_gt_idx = target_gt_idx.long() # enforce long dtype for indexing
 
         target_dist = gt_distances.flatten()[target_gt_idx]
         target_dist = (target_dist / max_dist).unsqueeze(2)
