@@ -344,7 +344,6 @@ class Dist(Detect):
         super().__init__(nc, ch)
         # TODO: use DFL for dist prediction
         self.ne = 1  # number of extra parameters (1 number for absolute distance)
-        self.max_dist = 100.0 # TODO: add to hyperparameters?
 
         self.cv4 = nn.ModuleList(
             nn.Sequential(
@@ -370,7 +369,6 @@ class Dist(Detect):
         dist = torch.cat([self.cv4[i](x[i]).view(bs, self.ne, -1) for i in range(self.nl)], 2)
 
         if not self.training:
-            # dist = dist * self.max_dist # bring distance back to real-life size on inference
             self.dist = dist
 
         x = Detect.forward(self, x)

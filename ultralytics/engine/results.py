@@ -577,7 +577,7 @@ class Results(SimpleClass, DataExportMixin):
                 name = ("" if id is None else f"id:{id} ") + names[c]
                 if labels:
                     if pred_dists is not None and show_dists:
-                        dist = pred_dists.data[i].cpu().numpy() # TODO: multiply with max_dist?
+                        dist = pred_dists.data[i].cpu().numpy()
                         label = f"{name} {d_conf:.2f} {dist:.2f}m" if conf else f"{name} {dist:.2f}m"
                     else:
                         label = f"{name} {d_conf:.2f}" if conf else name

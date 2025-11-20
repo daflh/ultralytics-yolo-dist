@@ -870,8 +870,7 @@ class v8DistLoss(v8DetectionLoss):
         target_gt_idx: torch.Tensor,  # targets object index [b, 8400]
         n_max_boxes: int              # max number of boxes per batch
     ) -> torch.Tensor:
-        # max_dist = 100.0
-        max_dist = 60.0 # STILL IDK WHY IT NEEDS TO BE 60.0
+        max_dist = self.hyp.max_dist
         bs = gt_distances.shape[0]
         batch_ind = torch.arange(end=bs, dtype=torch.int64, device=gt_distances.device)[..., None]
         target_gt_idx = target_gt_idx + batch_ind * n_max_boxes  # (b, h*w)

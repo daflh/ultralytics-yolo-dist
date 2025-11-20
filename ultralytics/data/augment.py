@@ -2219,8 +2219,7 @@ class Format:
                 xyxyxyxy2xywhr(torch.from_numpy(instances.segments)) if len(instances.segments) else torch.zeros((0, 5))
             )
         if self.return_distance:
-            # Normalize distance
-            # max_dist = 100.0 # TODO: add to hyperparameters?
+            # max_dist = 100.0
             # if instances.distances is not None:
             #     instances.distances /= max_dist
             labels["distances"] = (
