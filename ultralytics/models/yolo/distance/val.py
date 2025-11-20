@@ -33,7 +33,7 @@ class DistValidator(DetectionValidator):
         pbatch = super()._prepare_batch(si, batch)
         dists = batch["distances"][batch["batch_idx"] == si]
         dists = dists.clone()
-        pbatch["distances"] = dists * max_dist
+        # pbatch["distances"] = dists * max_dist
         return pbatch
 
     def _process_batch(self, preds: dict[str, torch.Tensor], batch: dict[str, torch.Tensor]) -> dict[str, np.ndarray]:

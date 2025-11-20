@@ -370,7 +370,7 @@ class Dist(Detect):
         dist = torch.cat([self.cv4[i](x[i]).view(bs, self.ne, -1) for i in range(self.nl)], 2)
 
         if not self.training:
-            dist = dist * self.max_dist # bring distance back to real-life size on inference
+            # dist = dist * self.max_dist # bring distance back to real-life size on inference
             self.dist = dist
 
         x = Detect.forward(self, x)

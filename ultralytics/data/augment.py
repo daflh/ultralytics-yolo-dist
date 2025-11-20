@@ -2220,9 +2220,9 @@ class Format:
             )
         if self.return_distance:
             # Normalize distance
-            max_dist = 100.0 # TODO: add to hyperparameters?
-            if instances.distances is not None:
-                instances.distances /= max_dist
+            # max_dist = 100.0 # TODO: add to hyperparameters?
+            # if instances.distances is not None:
+            #     instances.distances /= max_dist
             labels["distances"] = (
                 torch.empty(0, 3) if instances.distances is None else torch.from_numpy(instances.distances)
             )
