@@ -106,6 +106,10 @@ class DistValidator(DetectionValidator):
             gt_cls_np = gt_cls.cpu().numpy().astype(int)
             target_cls_pred[pred_idx] = gt_cls_np[label_idx]
 
+        # scale back to real-life distance
+        max_dist = self.args.get("max_dist", 100.0)
+        pred_dist_arr *= max_dist
+
         return {
             "tp": tp,
             "pred_dist": pred_dist_arr,
