@@ -572,12 +572,13 @@ class Results(SimpleClass, DataExportMixin):
 
         # Plot Detect results
         if pred_boxes is not None and show_boxes:
+            pred_dists_rev = reversed(pred_dists) if pred_dists is not None else None
             for i, d in enumerate(reversed(pred_boxes)):
                 c, d_conf, id = int(d.cls), float(d.conf) if conf else None, int(d.id.item()) if d.is_track else None
                 name = ("" if id is None else f"id:{id} ") + names[c]
                 if labels:
-                    if pred_dists is not None and show_dists:
-                        dist = pred_dists.data[i].cpu().numpy()
+                    if pred_dists_rev is not None and show_dists:
+                        dist = pred_dists_rev.data[i].cpu().numpy()
                         label = f"{name} {d_conf:.2f} {dist:.2f}m" if conf else f"{name} {dist:.2f}m"
                     else:
                         label = f"{name} {d_conf:.2f}" if conf else name

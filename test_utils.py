@@ -1,7 +1,14 @@
 import torch
 import cv2
+import requests
 import time
 import os
+
+def send_telegram_message(msg):
+    try:
+        requests.post("https://api.daflh.dev/telegram/sendMessage", json={"message": msg})
+    except Exception as e:
+        print(f"Failed to send Telegram message: {e}")
 
 def detect_objects(model, input_path, target_fps = 24):
     # model.info()

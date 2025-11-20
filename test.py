@@ -1,7 +1,7 @@
 import requests
 from ultralytics import YOLO
 from torchinfo import summary
-from test_utils import detect_objects
+from test_utils import detect_objects, send_telegram_message
 
 dataset_path = 'D:\\UGM\\tugas akhir\\3. skripsi\\code\\datasets'
 # dataset_path = '/home/ugm/Documents/zherk/datasets'
@@ -11,8 +11,8 @@ def on_epoch_end(trainer):
     eps = trainer.epochs
     # if ep == 1 or ep % 50 == 0 or ep == eps:
     if ep % 50 == 0 or ep == eps:
-        requests.post("https://api.daflh.dev/telegram/sendMessage", json={"message": f"Epoch {ep} of {eps} done"})
-
+        send_telegram_message(f"Epoch {ep} of {eps} done")
+        
 def main():
     # model = YOLO("yolo11n.yaml")
     model = YOLO("yolo11n-dist.yaml")
