@@ -798,7 +798,7 @@ class v8DistLoss(v8DetectionLoss):
         # self.huber = nn.HuberLoss(delta=1.0) # you also need to change dist loss gain
 
     def __call__(self, preds: Any, batch: dict[str, torch.Tensor]) -> tuple[torch.Tensor, torch.Tensor]:
-        loss = torch.zeros(4, device=self.device)  # box, cls, dfl, dist
+        loss = torch.zeros(4, device=self.device)  # box, dist, cls, dfl
         feats, pred_dist = preds if isinstance(preds[0], list) else preds[1]
         pred_distri, pred_scores = torch.cat([xi.view(feats[0].shape[0], self.no, -1) for xi in feats], 2).split(
             (self.reg_max * 4, self.nc), 1
@@ -838,12 +838,12 @@ class v8DistLoss(v8DetectionLoss):
         target_scores_sum = max(target_scores.sum(), 1)
 
         # Cls loss
-        # loss[1] = self.varifocal_loss(pred_scores, target_scores, target_labels) / target_scores_sum  # VFL way
-        loss[1] = self.bce(pred_scores, target_scores.to(dtype)).sum() / target_scores_sum  # BCE
+        # loss[2] = self.varifocal_loss(pred_scores, target_scores, target_labels) / target_scores_sum  # VFL way
+        loss[2] = self.bce(pred_scores, target_scores.to(dtype)).sum() / target_scores_sum  # BCE
 
         # Bbox loss
         if fg_mask.sum():
-            loss[0], loss[2] = self.bbox_loss(
+            loss[0], loss[3] = self.bbox_loss(
                 pred_distri,
                 pred_bboxes,
                 anchor_points,
@@ -854,12 +854,12 @@ class v8DistLoss(v8DetectionLoss):
             )
 
         n_max_boxes = gt_bboxes.shape[1]
-        loss[3] = self.calculate_distance_loss(pred_dist, gt_dist, target_gt_idx, n_max_boxes)
+        loss[1] = self.calculate_distance_loss(pred_dist, gt_dist, target_gt_idx, n_max_boxes)
 
         loss[0] *= self.hyp.box  # box gain
-        loss[1] *= self.hyp.cls  # cls gain
-        loss[2] *= self.hyp.dfl  # dfl gain
-        loss[3] *= self.hyp.dist
+        loss[1] *= self.hyp.dist # dist gain
+        loss[2] *= self.hyp.cls  # cls gain
+        loss[3] *= self.hyp.dfl  # dfl gain
 
         return loss * batch_size, loss.detach()
 

@@ -377,8 +377,10 @@ class Dist(Detect):
         
         if self.training:
             return x, dist
-        # export or inference
-        return torch.cat([x, dist], 1) if self.export else (torch.cat([x[0], dist], 1), (x[1], dist))
+        elif self.export:
+            return torch.cat([x, dist], 1)
+        else: # inference
+            return (torch.cat([x[0], dist], 1), (x[1], dist))
 
 
 class Pose(Detect):
