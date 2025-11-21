@@ -18,6 +18,7 @@ class DistValidator(DetectionValidator):
         super().__init__(dataloader, save_dir, args, _callbacks)
         self.args.task = "dist"
         self.metrics = DistMetrics()
+        self.metrics.max_dist = self.args.get("max_dist", 100.0)
 
     def preprocess(self, batch: dict[str, Any]) -> dict[str, Any]:
         batch = super().preprocess(batch)
@@ -29,11 +30,9 @@ class DistValidator(DetectionValidator):
         self.confusion_matrix.task = "dist"
 
     def _prepare_batch(self, si: int, batch: dict[str, Any]) -> dict[str, Any]:
-        max_dist = 100.0 # TODO: add to hyperparameters?
         pbatch = super()._prepare_batch(si, batch)
-        dists = batch["distances"][batch["batch_idx"] == si]
-        dists = dists.clone()
-        pbatch["distances"] = dists * max_dist
+        idx = batch["batch_idx"] == si
+        pbatch["distances"] = batch["distances"][idx]
         return pbatch
 
     def _process_batch(self, preds: dict[str, torch.Tensor], batch: dict[str, torch.Tensor]) -> dict[str, np.ndarray]:
@@ -108,6 +107,10 @@ class DistValidator(DetectionValidator):
             gt_cls_np = gt_cls.cpu().numpy().astype(int)
             target_cls_pred[pred_idx] = gt_cls_np[label_idx]
 
+        # scale back to real-life distance
+        max_dist = self.args.get("max_dist", 100.0)
+        pred_dist_arr *= max_dist
+
         return {
             "tp": tp,
             "pred_dist": pred_dist_arr,
@@ -131,7 +134,7 @@ class DistValidator(DetectionValidator):
             "mAP50",
             "mAP50-95)",
             "Dist(MAE",
-            "MRE)",
+            "MDE)",
         )
 
     def plot_predictions(self, batch: dict[str, Any], preds: list[torch.Tensor], ni: int) -> None:

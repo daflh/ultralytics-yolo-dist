@@ -12,6 +12,8 @@ class DistPredictor(DetectionPredictor):
 
     def construct_result(self, pred, img, orig_img, img_path):
         pred[:, :4] = ops.scale_boxes(img.shape[2:], pred[:, :4], orig_img.shape)
+        # bring back to real-life distance
+        pred[:, 6] *= self.args.get("max_dist", 100.0)
         return Results(
             orig_img,
             path=img_path,

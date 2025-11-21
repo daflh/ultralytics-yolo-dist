@@ -1,7 +1,16 @@
 import torch
 import cv2
+import requests
 import time
 import os
+
+def send_telegram_message(msg):
+    try:
+        res = requests.post("https://api.daflh.dev/telegram/sendMessage", json={"message": msg})
+        if res.status_code != 200:
+            raise Exception(f"Error {res.status_code}")
+    except Exception as e:
+        print(f"Failed to send Telegram message: {e}")
 
 def detect_objects(model, input_path, target_fps = 24):
     # model.info()
@@ -44,7 +53,7 @@ def detect_objects(model, input_path, target_fps = 24):
 
             # Annotate results
             annotated_frame = results[0].plot()
-            print(results[0].distances)
+            # print(results[0].distances)
 
             # Compute FPS
             infer_time = time.time() - frame_start

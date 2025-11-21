@@ -1595,6 +1595,7 @@ class DistMetrics(DetMetrics):
     def __init__(self, names: dict[int, str] = {}) -> None:
         DetMetrics.__init__(self, names)
         self.task = "dist"
+        self.max_dist = 100.0 # maximum distance value for MDE
         # add stats to collect predicted and target z distances per prediction
         # these arrays are appended per-batch by the validator via update_stats
         self.stats["pred_dist"] = []
@@ -1605,33 +1606,36 @@ class DistMetrics(DetMetrics):
         # stored aggregated results
         self._dist_mae = -1.0
         self._dist_mre = -1.0
+        self._dist_mde = -1.0
         self._class_dist_mae = np.full((len(self.ap_class_index),), -1, dtype=float)
         self._class_dist_mre = np.full((len(self.ap_class_index),), -1, dtype=float)
+        self._class_dist_mde = np.full((len(self.ap_class_index),), -1, dtype=float)
 
     @property
     def keys(self) -> list[str]:
         return DetMetrics.keys.fget(self) + [
-            "metrics/MAE(D)",
-            "metrics/MRE(D)"
+            "metrics/MAE(D)", # Mean Absolute Error
+            # "metrics/MRE(D)", # Mean Relative Error, suspectible to outliers, MAE is preferred
+            "metrics/MDE(D)" # Mean Distance Error, like MAE but penalize FN
         ]
 
     def mean_results(self) -> list[float]:
-        # Compute mean MAE and MRE computed during process()
+        # Compute metrics during process()
         base = DetMetrics.mean_results(self)
-        return base + [float(self._dist_mae), float(self._dist_mre)]
+        return base + [float(self._dist_mae), float(self._dist_mde)]
 
     def class_result(self, i: int) -> list[float]:
-        # Append per-class MAE and MRE for class index i (indexed by ap_class_index)
+        # Append per-class metrics for class index i (indexed by ap_class_index)
         base = DetMetrics.class_result(self, i)
 
         if i < len(self._class_dist_mae):
             mae_c = float(self._class_dist_mae[i])
-            mre_c = float(self._class_dist_mre[i])
+            mde_c = float(self._class_dist_mde[i])
         else:
             mae_c = -1.0
-            mre_c = -1.0
+            mde_c = -1.0
 
-        return base + (mae_c, mre_c)
+        return base + (mae_c, mde_c)
 
     def process(self, save_dir: Path = Path("."), plot: bool = False, on_plot=None) -> dict[str, np.ndarray]:
         stats = DetMetrics.process(self, save_dir=save_dir, plot=plot, on_plot=on_plot)
@@ -1641,8 +1645,10 @@ class DistMetrics(DetMetrics):
         # reinitialize value because ap_class_index may have changed
         self._dist_mae = -1.0
         self._dist_mre = -1.0
+        self._dist_mde = -1.0
         self._class_dist_mae = np.full((len(self.ap_class_index),), -1, dtype=float)
         self._class_dist_mre = np.full((len(self.ap_class_index),), -1, dtype=float)
+        self._class_dist_mde = np.full((len(self.ap_class_index),), -1, dtype=float)
 
         # concatenate stats if not already
         stats = {k: np.concatenate(v, 0) for k, v in self.stats.items()}
@@ -1655,25 +1661,43 @@ class DistMetrics(DetMetrics):
             matched = tp[:, 0].astype(bool) if tp.ndim == 2 and tp.shape[1] > 0 else np.zeros(tp.shape[0], dtype=bool)
             sel = matched & np.isfinite(target_dist)
             
-            # mean MAE/MRE
+            # MAE & MRE calculation
             if sel.sum() > 0:
+                # TODO: fix don't take account err == -1
                 err = np.abs(pred_dist[sel] - target_dist[sel])
                 self._dist_mae = float(np.mean(err))
                 denom = np.abs(target_dist[sel]) + 1e-9
                 self._dist_mre = float(np.mean(err / denom))
 
-            # per-class MAE/MRE
+            # MDE calculation
+            N = len(target_dist)
+            if N > 0:
+                mde_errors = np.zeros(N, dtype=float)
+                mde_errors[matched] = np.abs(pred_dist[matched] - target_dist[matched]) # TP
+                mde_errors[~matched] = self.max_dist # FN
+                self._dist_mde = float(np.mean(mde_errors))
+
+            # per-class metrics calculation
             for i, c in enumerate(self.ap_class_index):
-                sel_c = sel.copy()
-                if "target_cls_pred" in stats:
-                    sel_c &= (stats["target_cls_pred"] == c)
-                else:
-                    # fallback: no per-pred target class info -> cannot compute per-class distance reliably
-                    sel_c &= np.zeros(sel.shape, dtype=bool)
+                sel_c_mask = (stats["target_cls_pred"] == c) if "target_cls_pred" in stats else np.zeros(sel.shape, bool)
+                sel_c = sel & sel_c_mask
+
+                # per-class MAE & MRE
                 if sel_c.sum() > 0:
                     err_c = np.abs(pred_dist[sel_c] - target_dist[sel_c])
                     self._class_dist_mae[i] = float(np.mean(err_c))
                     denom_c = np.abs(target_dist[sel_c]) + 1e-9
                     self._class_dist_mre[i] = float(np.mean(err_c / denom_c))
+
+                # per-class MDE
+                cls_idx = sel_c_mask
+                if cls_idx.sum() > 0:
+                    mde_errors_c = np.zeros(cls_idx.sum(), float)
+                    matched_c = matched[cls_idx]
+                    pred_c = pred_dist[cls_idx]
+                    gt_c = target_dist[cls_idx]
+                    mde_errors_c[matched_c] = np.abs(pred_c[matched_c] - gt_c[matched_c])
+                    mde_errors_c[~matched_c] = self.max_dist
+                    self._class_dist_mde[i] = float(np.mean(mde_errors_c))
 
         return stats
