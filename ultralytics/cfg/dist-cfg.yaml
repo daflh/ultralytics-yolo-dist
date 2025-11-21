@@ -1,3 +1,5 @@
+# Ultralytics 🚀 AGPL-3.0 License - https://ultralytics.com/license
+
 optimizer: SGD
 lr0: 0.0025
 close_mosaic: 0
@@ -6,21 +8,21 @@ erasing: 0.0
 
 ## Augmentation hyperparameters
 
-hsv_h: 0.015      # small is safe
+hsv_h: 0.015 # small is safe
 hsv_s: 0.7
 hsv_v: 0.4
 
-degrees: 0.0      # DON'T
-translate: 0.05   # only small
-scale: 0.0        # DON'T
-shear: 0.0        # DON'T
-perspective: 0.0  # DON'T
+degrees: 0.0 # DON'T
+translate: 0.05 # only small
+scale: 0.0 # DON'T
+shear: 0.0 # DON'T
+perspective: 0.0 # DON'T
 
-flipud: 0.0       # off, unrealistic for driving scenes
+flipud: 0.0 # off, unrealistic for driving scenes
 fliplr: 0.5
 
 bgr: 0.0
 
-mosaic: 0.0       # DON'T
-mixup: 0.0        # DON'T
-cutmix: 0.0       # DON'T
+mosaic: 0.0 # DON'T
+mixup: 0.0 # DON'T
+cutmix: 0.0 # DON'T

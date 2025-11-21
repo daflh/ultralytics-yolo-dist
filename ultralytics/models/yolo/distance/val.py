@@ -2,14 +2,13 @@
 
 from __future__ import annotations
 
-from pathlib import Path
 from typing import Any
 
 import numpy as np
 import torch
 
 from ultralytics.models.yolo.detect import DetectionValidator
-from ultralytics.utils import LOGGER, ops
+from ultralytics.utils import ops
 from ultralytics.utils.metrics import DistMetrics, box_iou
 
 
@@ -43,7 +42,7 @@ class DistValidator(DetectionValidator):
                 "tp": np.zeros((n_pred, self.niou), dtype=bool),
                 "pred_dist": np.zeros((n_pred,), dtype=float),
                 "target_dist": np.zeros((n_pred,), dtype=float),
-                "target_cls_pred": np.full((n_pred,), -1, dtype=int)
+                "target_cls_pred": np.full((n_pred,), -1, dtype=int),
             }
 
         # IoU / similarity between GT and predictions (N_gt, N_pred).
@@ -115,7 +114,7 @@ class DistValidator(DetectionValidator):
             "tp": tp,
             "pred_dist": pred_dist_arr,
             "target_dist": target_dist_arr,
-            "target_cls_pred": target_cls_pred
+            "target_cls_pred": target_cls_pred,
         }
 
     def postprocess(self, preds: torch.Tensor) -> list[dict[str, torch.Tensor]]:
@@ -123,7 +122,7 @@ class DistValidator(DetectionValidator):
         for pred in preds:
             pred["distances"] = pred.pop("extra").view(-1, 1)  # remove extra if exists
         return preds
-    
+
     def get_desc(self) -> str:
         return ("%22s" + "%11s" * 8) % (
             "Class",
@@ -142,4 +141,3 @@ class DistValidator(DetectionValidator):
             # TODO: fix this duplicated `xywh2xyxy`
             p["bboxes"][:, :4] = ops.xywh2xyxy(p["bboxes"][:, :4])  # convert to xyxy format for plotting
         super().plot_predictions(batch, preds, ni)  # plot bboxes
-    

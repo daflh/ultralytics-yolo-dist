@@ -13,8 +13,8 @@ from ultralytics.models import yolo
 from ultralytics.nn.tasks import (
     ClassificationModel,
     DetectionModel,
-    OBBModel,
     DistModel,
+    OBBModel,
     PoseModel,
     SegmentationModel,
     WorldModel,
@@ -25,8 +25,7 @@ from ultralytics.utils import ROOT, YAML
 
 
 class YOLO(Model):
-    """
-    YOLO (You Only Look Once) object detection model.
+    """YOLO (You Only Look Once) object detection model.
 
     This class provides a unified interface for YOLO models, automatically switching to specialized model types
     (YOLOWorld or YOLOE) based on the model filename. It supports various computer vision tasks including object
@@ -53,16 +52,15 @@ class YOLO(Model):
     """
 
     def __init__(self, model: str | Path = "yolo11n.pt", task: str | None = None, verbose: bool = False):
-        """
-        Initialize a YOLO model.
+        """Initialize a YOLO model.
 
         This constructor initializes a YOLO model, automatically switching to specialized model types
         (YOLOWorld or YOLOE) based on the model filename.
 
         Args:
             model (str | Path): Model name or path to model file, i.e. 'yolo11n.pt', 'yolo11n.yaml'.
-            task (str, optional): YOLO task specification, i.e. 'detect', 'segment', 'classify', 'pose', 'obb'.
-                Defaults to auto-detection based on model.
+            task (str, optional): YOLO task specification, i.e. 'detect', 'segment', 'classify', 'pose', 'obb'. Defaults
+                to auto-detection based on model.
             verbose (bool): Display model info on load.
 
         Examples:
@@ -128,17 +126,16 @@ class YOLO(Model):
                 "trainer": yolo.distance.DistTrainer,
                 "validator": yolo.distance.DistValidator,
                 "predictor": yolo.distance.DistPredictor,
-            }
+            },
         }
 
 
 class YOLOWorld(Model):
-    """
-    YOLO-World object detection model.
+    """YOLO-World object detection model.
 
-    YOLO-World is an open-vocabulary object detection model that can detect objects based on text descriptions
-    without requiring training on specific classes. It extends the YOLO architecture to support real-time
-    open-vocabulary detection.
+    YOLO-World is an open-vocabulary object detection model that can detect objects based on text descriptions without
+    requiring training on specific classes. It extends the YOLO architecture to support real-time open-vocabulary
+    detection.
 
     Attributes:
         model: The loaded YOLO-World model instance.
@@ -159,8 +156,7 @@ class YOLOWorld(Model):
     """
 
     def __init__(self, model: str | Path = "yolov8s-world.pt", verbose: bool = False) -> None:
-        """
-        Initialize YOLOv8-World model with a pre-trained model file.
+        """Initialize YOLOv8-World model with a pre-trained model file.
 
         Loads a YOLOv8-World model for object detection. If no custom class names are provided, it assigns default
         COCO class names.
@@ -188,8 +184,7 @@ class YOLOWorld(Model):
         }
 
     def set_classes(self, classes: list[str]) -> None:
-        """
-        Set the model's class names for detection.
+        """Set the model's class names for detection.
 
         Args:
             classes (list[str]): A list of categories i.e. ["person"].
@@ -207,11 +202,10 @@ class YOLOWorld(Model):
 
 
 class YOLOE(Model):
-    """
-    YOLOE object detection and segmentation model.
+    """YOLOE object detection and segmentation model.
 
-    YOLOE is an enhanced YOLO model that supports both object detection and instance segmentation tasks with
-    improved performance and additional features like visual and text positional embeddings.
+    YOLOE is an enhanced YOLO model that supports both object detection and instance segmentation tasks with improved
+    performance and additional features like visual and text positional embeddings.
 
     Attributes:
         model: The loaded YOLOE model instance.
@@ -242,8 +236,7 @@ class YOLOE(Model):
     """
 
     def __init__(self, model: str | Path = "yoloe-11s-seg.pt", task: str | None = None, verbose: bool = False) -> None:
-        """
-        Initialize YOLOE model with a pre-trained model file.
+        """Initialize YOLOE model with a pre-trained model file.
 
         Args:
             model (str | Path): Path to the pre-trained model file. Supports *.pt and *.yaml formats.
@@ -276,8 +269,7 @@ class YOLOE(Model):
         return self.model.get_text_pe(texts)
 
     def get_visual_pe(self, img, visual):
-        """
-        Get visual positional embeddings for the given image and visual features.
+        """Get visual positional embeddings for the given image and visual features.
 
         This method extracts positional embeddings from visual features based on the input image. It requires
         that the model is an instance of YOLOEModel.
@@ -299,8 +291,7 @@ class YOLOE(Model):
         return self.model.get_visual_pe(img, visual)
 
     def set_vocab(self, vocab: list[str], names: list[str]) -> None:
-        """
-        Set vocabulary and class names for the YOLOE model.
+        """Set vocabulary and class names for the YOLOE model.
 
         This method configures the vocabulary and class names used by the model for text processing and
         classification tasks. The model must be an instance of YOLOEModel.
@@ -325,8 +316,7 @@ class YOLOE(Model):
         return self.model.get_vocab(names)
 
     def set_classes(self, classes: list[str], embeddings: torch.Tensor | None = None) -> None:
-        """
-        Set the model's class names and embeddings for detection.
+        """Set the model's class names and embeddings for detection.
 
         Args:
             classes (list[str]): A list of categories i.e. ["person"].
@@ -351,8 +341,7 @@ class YOLOE(Model):
         refer_data: str | None = None,
         **kwargs,
     ):
-        """
-        Validate the model using text or visual prompts.
+        """Validate the model using text or visual prompts.
 
         Args:
             validator (callable, optional): A callable validator function. If None, a default validator is loaded.
@@ -380,19 +369,18 @@ class YOLOE(Model):
         predictor=yolo.yoloe.YOLOEVPDetectPredictor,
         **kwargs,
     ):
-        """
-        Run prediction on images, videos, directories, streams, etc.
+        """Run prediction on images, videos, directories, streams, etc.
 
         Args:
-            source (str | int | PIL.Image | np.ndarray, optional): Source for prediction. Accepts image paths,
-                directory paths, URL/YouTube streams, PIL images, numpy arrays, or webcam indices.
-            stream (bool): Whether to stream the prediction results. If True, results are yielded as a
-                generator as they are computed.
-            visual_prompts (dict[str, list]): Dictionary containing visual prompts for the model. Must include
-                'bboxes' and 'cls' keys when non-empty.
+            source (str | int | PIL.Image | np.ndarray, optional): Source for prediction. Accepts image paths, directory
+                paths, URL/YouTube streams, PIL images, numpy arrays, or webcam indices.
+            stream (bool): Whether to stream the prediction results. If True, results are yielded as a generator as they
+                are computed.
+            visual_prompts (dict[str, list]): Dictionary containing visual prompts for the model. Must include 'bboxes'
+                and 'cls' keys when non-empty.
             refer_image (str | PIL.Image | np.ndarray, optional): Reference image for visual prompts.
-            predictor (callable, optional): Custom predictor function. If None, a predictor is automatically
-                loaded based on the task.
+            predictor (callable, optional): Custom predictor function. If None, a predictor is automatically loaded
+                based on the task.
             **kwargs (Any): Additional keyword arguments passed to the predictor.
 
         Returns:

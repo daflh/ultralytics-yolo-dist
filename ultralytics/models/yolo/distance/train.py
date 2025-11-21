@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
-from typing import Any
 from copy import copy
 from pathlib import Path
+from typing import Any
 
 from ultralytics.models import yolo
 from ultralytics.nn.tasks import DistModel

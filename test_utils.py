@@ -1,8 +1,12 @@
-import torch
+# Ultralytics 🚀 AGPL-3.0 License - https://ultralytics.com/license
+
+import os
+import time
+
 import cv2
 import requests
-import time
-import os
+import torch
+
 
 def send_telegram_message(msg):
     try:
@@ -12,19 +16,20 @@ def send_telegram_message(msg):
     except Exception as e:
         print(f"Failed to send Telegram message: {e}")
 
-def detect_objects(model, input_path, target_fps = 24):
+
+def detect_objects(model, input_path, target_fps=24):
     # model.info()
     # print(model)
 
     # summary(model.model, input_size=(1, 3, 640, 640))
 
-    device = 'cuda' if torch.cuda.is_available() else 'cpu'
+    device = "cuda" if torch.cuda.is_available() else "cpu"
     model.to(device)
     print(f"Using device: {device}")
 
     # --- Determine file type ---
     ext = os.path.splitext(input_path)[1].lower()
-    is_video = ext in ['.mp4', '.avi', '.mov', '.mkv']
+    is_video = ext in [".mp4", ".avi", ".mov", ".mkv"]
 
     if not os.path.exists(input_path):
         print(f"Error: File not found: {input_path}")
@@ -60,17 +65,16 @@ def detect_objects(model, input_path, target_fps = 24):
             sleep_time = (1.0 / target_fps) - infer_time
             if sleep_time > 0:
                 time.sleep(sleep_time)
-            
+
             frame_time = time.time() - frame_start
             fps = 1.0 / frame_time if frame_time > 0 else 0
 
             # Show FPS on the frame
-            cv2.putText(annotated_frame, f"FPS: {fps:.2f}", (10, 30),
-                        cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
+            cv2.putText(annotated_frame, f"FPS: {fps:.2f}", (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
 
             cv2.imshow("YOLO Detection (Video)", annotated_frame)
 
-            if cv2.waitKey(1) & 0xFF == ord('q'):
+            if cv2.waitKey(1) & 0xFF == ord("q"):
                 break
 
             frame_count += 1
@@ -109,7 +113,6 @@ def detect_objects(model, input_path, target_fps = 24):
 #     # input_path = "datasets/new-york.mp4"
 #     input_path = arg2 if arg2 else "../datasets/new-york.mp4"
 #     # input_path = arg2 if arg2 else "../datasets/kitti-sequence2.mp4"
-    
+
 #     model = YOLO(weights_path, verbose=True)
 #     detect_objects(model, input_path)
-    

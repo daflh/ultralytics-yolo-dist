@@ -18,8 +18,7 @@ from .tal import bbox2dist
 
 
 class VarifocalLoss(nn.Module):
-    """
-    Varifocal loss by Zhang et al.
+    """Varifocal loss by Zhang et al.
 
     Implements the Varifocal Loss function for addressing class imbalance in object detection by focusing on
     hard-to-classify examples and balancing positive/negative samples.
@@ -51,11 +50,10 @@ class VarifocalLoss(nn.Module):
 
 
 class FocalLoss(nn.Module):
-    """
-    Wraps focal loss around existing loss_fcn(), i.e. criteria = FocalLoss(nn.BCEWithLogitsLoss(), gamma=1.5).
+    """Wraps focal loss around existing loss_fcn(), i.e. criteria = FocalLoss(nn.BCEWithLogitsLoss(), gamma=1.5).
 
-    Implements the Focal Loss function for addressing class imbalance by down-weighting easy examples and focusing
-    on hard negatives during training.
+    Implements the Focal Loss function for addressing class imbalance by down-weighting easy examples and focusing on
+    hard negatives during training.
 
     Attributes:
         gamma (float): The focusing parameter that controls how much the loss focuses on hard-to-classify examples.
@@ -194,15 +192,15 @@ class KeypointLoss(nn.Module):
 
 
 class HuberLoss(nn.Module):
-    def __init__(self, c = 0.03):
-        super(HuberLoss, self).__init__()
+    def __init__(self, c=0.03):
+        super().__init__()
         self.c = c
 
     def forward(self, y_true, y_pred):
         error = y_true - y_pred
         abs_error = torch.abs(error)
         mask = abs_error < self.c
-        huber_loss = torch.where(mask, abs_error, (error ** 2 + self.c ** 2) / (2 * self.c))
+        huber_loss = torch.where(mask, abs_error, (error**2 + self.c**2) / (2 * self.c))
         return torch.mean(huber_loss)
 
 
@@ -412,8 +410,7 @@ class v8SegmentationLoss(v8DetectionLoss):
     def single_mask_loss(
         gt_mask: torch.Tensor, pred: torch.Tensor, proto: torch.Tensor, xyxy: torch.Tensor, area: torch.Tensor
     ) -> torch.Tensor:
-        """
-        Compute the instance segmentation loss for a single image.
+        """Compute the instance segmentation loss for a single image.
 
         Args:
             gt_mask (torch.Tensor): Ground truth mask of shape (N, H, W), where N is the number of objects.
@@ -445,8 +442,7 @@ class v8SegmentationLoss(v8DetectionLoss):
         imgsz: torch.Tensor,
         overlap: bool,
     ) -> torch.Tensor:
-        """
-        Calculate the loss for instance segmentation.
+        """Calculate the loss for instance segmentation.
 
         Args:
             fg_mask (torch.Tensor): A binary tensor of shape (BS, N_anchors) indicating which anchors are positive.
@@ -598,8 +594,7 @@ class v8PoseLoss(v8DetectionLoss):
         target_bboxes: torch.Tensor,
         pred_kpts: torch.Tensor,
     ) -> tuple[torch.Tensor, torch.Tensor]:
-        """
-        Calculate the keypoints loss for the model.
+        """Calculate the keypoints loss for the model.
 
         This function calculates the keypoints loss and keypoints object loss for a given batch. The keypoints loss is
         based on the difference between the predicted keypoints and ground truth keypoints. The keypoints object loss is
@@ -773,8 +768,7 @@ class v8OBBLoss(v8DetectionLoss):
     def bbox_decode(
         self, anchor_points: torch.Tensor, pred_dist: torch.Tensor, pred_angle: torch.Tensor
     ) -> torch.Tensor:
-        """
-        Decode predicted object bounding box coordinates from anchor points and distribution.
+        """Decode predicted object bounding box coordinates from anchor points and distribution.
 
         Args:
             anchor_points (torch.Tensor): Anchor points, (h*w, 2).
@@ -814,8 +808,10 @@ class v8DistLoss(v8DetectionLoss):
         anchor_points, stride_tensor = make_anchors(feats, self.stride, 0.5)
 
         # Targets
-        distances = batch["distances"][:, 2] # TODO: use euclidean distance (can be switched)
-        targets = torch.cat((batch["batch_idx"].view(-1, 1), batch["cls"].view(-1, 1), batch["bboxes"], distances.view(-1, 1)), 1)
+        distances = batch["distances"][:, 2]  # TODO: use euclidean distance (can be switched)
+        targets = torch.cat(
+            (batch["batch_idx"].view(-1, 1), batch["cls"].view(-1, 1), batch["bboxes"], distances.view(-1, 1)), 1
+        )
         targets = self.preprocess(targets, batch_size, scale_tensor=imgsz[[1, 0, 1, 0]])
         gt_labels, gt_bboxes, gt_dist = targets.split((1, 4, 1), 2)
         mask_gt = gt_bboxes.sum(2, keepdim=True).gt_(0.0)
@@ -853,7 +849,7 @@ class v8DistLoss(v8DetectionLoss):
         loss[1] = self.calculate_distance_loss(pred_dist, gt_dist, target_gt_idx, n_max_boxes)
 
         loss[0] *= self.hyp.box  # box gain
-        loss[1] *= self.hyp.dist # dist gain
+        loss[1] *= self.hyp.dist  # dist gain
         loss[2] *= self.hyp.cls  # cls gain
         loss[3] *= self.hyp.dfl  # dfl gain
 
@@ -861,10 +857,10 @@ class v8DistLoss(v8DetectionLoss):
 
     def calculate_distance_loss(
         self,
-        pred_distances: torch.Tensor, # predicted distances [b, 8400, 1]
-        gt_distances: torch.Tensor,   # GT distances [num_obj, 3]
+        pred_distances: torch.Tensor,  # predicted distances [b, 8400, 1]
+        gt_distances: torch.Tensor,  # GT distances [num_obj, 3]
         target_gt_idx: torch.Tensor,  # targets object index [b, 8400]
-        n_max_boxes: int              # max number of boxes per batch
+        n_max_boxes: int,  # max number of boxes per batch
     ) -> torch.Tensor:
         max_dist = self.hyp.max_dist
 
@@ -875,14 +871,14 @@ class v8DistLoss(v8DetectionLoss):
         bs = gt_distances.shape[0]
         batch_ind = torch.arange(end=bs, dtype=torch.int64, device=gt_distances.device)[..., None]
         target_gt_idx = target_gt_idx + batch_ind * n_max_boxes  # (b, h*w)
-        target_gt_idx = target_gt_idx.long() # enforce long dtype for indexing
+        target_gt_idx = target_gt_idx.long()  # enforce long dtype for indexing
 
         target_dist = gt_distances.flatten()[target_gt_idx]
         target_dist = (target_dist / max_dist).unsqueeze(2)
         dist_loss = self.huber(pred_distances, target_dist)
 
         return dist_loss
-        
+
 
 class E2EDetectLoss:
     """Criterion class for computing training losses for end-to-end detection."""
