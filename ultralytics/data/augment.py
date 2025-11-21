@@ -2219,9 +2219,6 @@ class Format:
                 xyxyxyxy2xywhr(torch.from_numpy(instances.segments)) if len(instances.segments) else torch.zeros((0, 5))
             )
         if self.return_distance:
-            # max_dist = 100.0
-            # if instances.distances is not None:
-            #     instances.distances /= max_dist
             labels["distances"] = (
                 torch.empty(0, 3) if instances.distances is None else torch.from_numpy(instances.distances)
             )

@@ -340,7 +340,7 @@ class OBB(Detect):
 
 
 class Dist(Detect):
-    def __init__(self, nc: int = 9, ch: tuple = ()):
+    def __init__(self, nc: int = 7, ch: tuple = ()):
         super().__init__(nc, ch)
         # TODO: use DFL for dist prediction
         self.ne = 1  # number of extra parameters (1 number for absolute distance)

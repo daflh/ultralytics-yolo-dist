@@ -1,4 +1,3 @@
-import requests
 from ultralytics import YOLO
 from torchinfo import summary
 from test_utils import detect_objects, send_telegram_message

@@ -822,23 +822,19 @@ class v8DistLoss(v8DetectionLoss):
 
         # Pboxes
         pred_bboxes = self.bbox_decode(anchor_points, pred_distri)  # xyxy, (b, h*w, 4)
-        # dfl_conf = pred_distri.view(batch_size, -1, 4, self.reg_max).detach().softmax(-1)
-        # dfl_conf = (dfl_conf.amax(-1).mean(-1) + dfl_conf.amax(-1).amin(-1)) / 2
 
         _, target_bboxes, target_scores, fg_mask, target_gt_idx = self.assigner(
-            # pred_scores.detach().sigmoid() * 0.8 + dfl_conf.unsqueeze(-1) * 0.2,
             pred_scores.detach().sigmoid(),
             (pred_bboxes.detach() * stride_tensor).type(gt_bboxes.dtype),
             anchor_points * stride_tensor,
             gt_labels,
             gt_bboxes,
-            mask_gt
+            mask_gt,
         )
 
         target_scores_sum = max(target_scores.sum(), 1)
 
         # Cls loss
-        # loss[2] = self.varifocal_loss(pred_scores, target_scores, target_labels) / target_scores_sum  # VFL way
         loss[2] = self.bce(pred_scores, target_scores.to(dtype)).sum() / target_scores_sum  # BCE
 
         # Bbox loss
@@ -871,6 +867,11 @@ class v8DistLoss(v8DetectionLoss):
         n_max_boxes: int              # max number of boxes per batch
     ) -> torch.Tensor:
         max_dist = self.hyp.max_dist
+
+        # skip if no gt distances
+        if gt_distances.numel() == 0 or target_gt_idx.numel() == 0:
+            return torch.tensor(0.0, device=pred_distances.device)
+
         bs = gt_distances.shape[0]
         batch_ind = torch.arange(end=bs, dtype=torch.int64, device=gt_distances.device)[..., None]
         target_gt_idx = target_gt_idx + batch_ind * n_max_boxes  # (b, h*w)
@@ -881,7 +882,7 @@ class v8DistLoss(v8DetectionLoss):
         dist_loss = self.huber(pred_distances, target_dist)
 
         return dist_loss
-    
+        
 
 class E2EDetectLoss:
     """Criterion class for computing training losses for end-to-end detection."""
