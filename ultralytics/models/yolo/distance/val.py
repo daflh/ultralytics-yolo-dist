@@ -18,6 +18,7 @@ class DistValidator(DetectionValidator):
         super().__init__(dataloader, save_dir, args, _callbacks)
         self.args.task = "dist"
         self.metrics = DistMetrics()
+        self.metrics.max_dist = self.args.get("max_dist", 100.0)
 
     def preprocess(self, batch: dict[str, Any]) -> dict[str, Any]:
         batch = super().preprocess(batch)
@@ -133,7 +134,7 @@ class DistValidator(DetectionValidator):
             "mAP50",
             "mAP50-95)",
             "Dist(MAE",
-            "MRE)",
+            "MDE)",
         )
 
     def plot_predictions(self, batch: dict[str, Any], preds: list[torch.Tensor], ni: int) -> None:
