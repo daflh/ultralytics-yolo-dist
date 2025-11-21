@@ -1,6 +1,6 @@
 from ultralytics import YOLO
 from torchinfo import summary
-from test_utils import detect_objects, send_telegram_message
+from utils import detect_objects, send_telegram_message
 
 dataset_path = 'D:\\UGM\\tugas akhir\\3. skripsi\\code\\datasets'
 # dataset_path = '/home/ugm/Documents/zherk/datasets'
@@ -24,7 +24,7 @@ def main():
 
     # model.load(weights="../weights/yolo11n.pt")
     # model.load(weights="../weights/yolo11n_KITTI_pretrained_ep600.pt")
-    # model.load(weights="../weights/yolov11n-distance_KITTI_ep300.pt")
+    model.load(weights="../weights/yolo11n-dist_3dc7dc7_ep250.pt")
     # model.load(weights="../runs/dist/train129/weights/best.pt")
     # model.load(weights="./best.pt")
     
@@ -41,10 +41,10 @@ def main():
     # print(metrics)
     
     # detect_objects(model, "../datasets/street.jpg")
-    # detect_objects(model, "../datasets/005992.png")
+    # detect_objects(model, "../datasets/005992.png", show_bev=True)
     # detect_objects(model, "../datasets/000007.png")
     # detect_objects(model, "../datasets/new-york.mp4")
-    # detect_objects(model, "../datasets/kitti-track-video/0014.mp4", 10)
+    # detect_objects(model, "../datasets/kitti-track-video/0014.mp4", 10, True)
     # detect_objects(model, "../datasets/kitti-sequence2.mp4")
 
     # model.info(verbose=True, detailed=True)
