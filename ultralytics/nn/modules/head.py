@@ -349,7 +349,7 @@ class Dist(Detect):
             nn.Sequential(
                 nn.Conv2d(x, 64, 1), nn.ReLU(),
                 nn.Conv2d(64, 32, 1), nn.ReLU(),
-                nn.Conv2d(32, 1, 1),nn.ReLU()
+                nn.Conv2d(32, 1, 1), nn.ReLU()
             ) for x in ch
         )
         

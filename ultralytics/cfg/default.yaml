@@ -47,7 +47,7 @@ mask_ratio: 4 # (int) mask downsample ratio (segment only)
 dropout: 0.0 # (float) dropout for classification head (classify only)
 
 # Distance Estimation
-max_dist: 60.0 # (float) maximum distance for training and inference
+max_dist: 100.0 # (float) maximum distance for training and inference
 
 # Val/Test settings ----------------------------------------------------------------------------------------------------
 val: True # (bool) run validation/testing during training

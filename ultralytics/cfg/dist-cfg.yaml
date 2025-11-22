@@ -1,5 +1,5 @@
-optimizer: SGD
-lr0: 0.0025
+# optimizer: SGD
+# lr0: 0.0025
 close_mosaic: 0
 auto_augment: null
 erasing: 0.0
