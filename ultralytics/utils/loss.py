@@ -793,6 +793,7 @@ class v8OBBLoss(v8DetectionLoss):
 class v8DistLoss(v8DetectionLoss):
     def __init__(self, model):
         super().__init__(model)
+        self.model = model
         self.mse = nn.MSELoss()
         self.huber = HuberLoss()
         # self.huber = nn.HuberLoss(delta=1.0) # you also need to change dist loss gain
@@ -850,7 +851,14 @@ class v8DistLoss(v8DetectionLoss):
             )
 
         n_max_boxes = gt_bboxes.shape[1]
-        loss[1] = self.calculate_distance_loss(pred_dist, gt_dist, target_gt_idx, n_max_boxes)
+        loss[1] = self.calculate_distance_loss(
+            pred_residual=pred_dist,
+            gt_distances=gt_dist,
+            target_gt_idx=target_gt_idx,
+            n_max_boxes=n_max_boxes,
+            pred_bboxes=pred_bboxes,
+            gt_labels=gt_labels,
+        )
 
         loss[0] *= self.hyp.box  # box gain
         loss[1] *= self.hyp.dist # dist gain
@@ -861,25 +869,41 @@ class v8DistLoss(v8DetectionLoss):
 
     def calculate_distance_loss(
         self,
-        pred_distances: torch.Tensor, # predicted distances [b, 8400, 1]
+        pred_residual: torch.Tensor,  # predicted distances [b, 8400, 1]
         gt_distances: torch.Tensor,   # GT distances [num_obj, 3]
         target_gt_idx: torch.Tensor,  # targets object index [b, 8400]
-        n_max_boxes: int              # max number of boxes per batch
+        n_max_boxes: int,             # max number of boxes per batch
+        pred_bboxes: torch.Tensor,    # predicted boxes [b, 8400, 4]
+        gt_labels: torch.Tensor,      # GT labels [b, n_max_boxes, 1]
     ) -> torch.Tensor:
         max_dist = self.hyp.max_dist
+        bs = gt_distances.shape[0]
 
         # skip if no gt distances
         if gt_distances.numel() == 0 or target_gt_idx.numel() == 0:
-            return torch.tensor(0.0, device=pred_distances.device)
+            return torch.tensor(0.0, device=pred_residual.device)
 
-        bs = gt_distances.shape[0]
         batch_ind = torch.arange(end=bs, dtype=torch.int64, device=gt_distances.device)[..., None]
         target_gt_idx = target_gt_idx + batch_ind * n_max_boxes  # (b, h*w)
         target_gt_idx = target_gt_idx.long() # enforce long dtype for indexing
 
         target_dist = gt_distances.flatten()[target_gt_idx]
         target_dist = (target_dist / max_dist).unsqueeze(2)
-        dist_loss = self.huber(pred_distances, target_dist)
+
+        # Compute bbox height
+        bbox_h = pred_bboxes[..., 3] - pred_bboxes[..., 1]  # y2 - y1
+        bbox_h = bbox_h.unsqueeze(2)
+        bbox_h = torch.clamp(bbox_h, min=1e-6) # avoid div by zero
+
+        # Compute class index for k
+        cls_idx = gt_labels.long().flatten()[target_gt_idx]
+        k = self.model.model[-1].k[cls_idx]
+        k = k.unsqueeze(2)
+
+        scale = 0.3 # scale factor for residual
+        pred_geometric = k / (bbox_h + 1e-6) # add small value to avoid div by zero
+        pred_dist = pred_geometric * (1 + scale * pred_residual)
+        dist_loss = self.huber(pred_dist, target_dist)
 
         return dist_loss
         

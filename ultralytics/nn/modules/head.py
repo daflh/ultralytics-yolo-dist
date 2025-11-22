@@ -342,9 +342,13 @@ class OBB(Detect):
 class Dist(Detect):
     def __init__(self, nc: int = 7, ch: tuple = ()):
         super().__init__(nc, ch)
-        # TODO: use DFL for dist prediction
         self.ne = 1  # number of extra parameters (1 number for absolute distance)
 
+        # TODO: use DFL for dist prediction
+        # Geometric scale for distance estimation
+        self.k = nn.Parameter(torch.ones(nc) * 50.0) # initialize to 50 meters
+
+        # Residual prediction head
         self.cv4 = nn.ModuleList(
             nn.Sequential(
                 nn.Conv2d(x, 64, 1), nn.ReLU(),
@@ -352,33 +356,23 @@ class Dist(Detect):
                 nn.Conv2d(32, 1, 1), nn.ReLU()
             ) for x in ch
         )
-        
-        # hidden_ratio = 0.25
-        # mod = []
-        # for x in ch:
-        #     hidden = max(int(x * hidden_ratio), 32)
-        #     mod.append(nn.Sequential(
-        #         nn.Conv2d(x, hidden, 3, padding=1, bias=False), nn.BatchNorm2d(hidden), nn.SiLU(inplace=True),
-        #         nn.Conv2d(hidden, hidden, 3, padding=1, bias=False), nn.BatchNorm2d(hidden), nn.SiLU(inplace=True),
-        #         nn.Conv2d(hidden, 1, 1)
-        #     ))
-        # self.cv4 = nn.ModuleList(mod)
 
-    def forward(self, x: list[torch.Tensor]) -> torch.Tensor | tuple:
-        bs = x[0].shape[0]  # batch size
-        dist = torch.cat([self.cv4[i](x[i]).view(bs, self.ne, -1) for i in range(self.nl)], 2)
+    def forward(self, det_out: list[torch.Tensor]) -> torch.Tensor | tuple:
+        bs = det_out[0].shape[0]  # batch size
+        residual_raw = torch.cat([self.cv4[i](det_out[i]).view(bs, self.ne, -1) for i in range(self.nl)], dim=2)
+        residual = torch.tanh(residual_raw)  # restrict to -1 → +1
 
-        if not self.training:
-            self.dist = dist
+        # if not self.training:
+        #     self.dist = dist
 
-        x = Detect.forward(self, x)
+        det_out = super().forward(self, det_out)
         
         if self.training:
-            return x, dist
+            return det_out, residual
         elif self.export:
-            return torch.cat([x, dist], 1)
+            return torch.cat([det_out, residual], 1)
         else: # inference
-            return (torch.cat([x[0], dist], 1), (x[1], dist))
+            return (torch.cat([det_out[0], residual], 1), (det_out[1], residual))
 
 
 class Pose(Detect):
