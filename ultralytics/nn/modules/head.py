@@ -349,30 +349,61 @@ class Dist(Detect):
         self.k = nn.Parameter(torch.ones(nc) * 50.0) # initialize to 50 meters
 
         # Residual prediction head
+        # final activation should allow negative residuals -> use Tanh
         self.cv4 = nn.ModuleList(
             nn.Sequential(
                 nn.Conv2d(x, 64, 1), nn.ReLU(),
                 nn.Conv2d(64, 32, 1), nn.ReLU(),
-                nn.Conv2d(32, 1, 1), nn.ReLU()
+                nn.Conv2d(32, 1, 1), nn.Tanh()
             ) for x in ch
         )
 
-    def forward(self, det_out: list[torch.Tensor]) -> torch.Tensor | tuple:
-        bs = det_out[0].shape[0]  # batch size
-        residual_raw = torch.cat([self.cv4[i](det_out[i]).view(bs, self.ne, -1) for i in range(self.nl)], dim=2)
-        residual = torch.tanh(residual_raw)  # restrict to -1 → +1
+    def forward(self, x: list[torch.Tensor]) -> torch.Tensor | tuple:
+        bs = x[0].shape[0]  # batch size
+        residual = torch.cat([self.cv4[i](x[i]).view(bs, self.ne, -1) for i in range(self.nl)], dim=2)
+        # residual = torch.tanh(residual_raw)  # restrict to -1 → +1
 
         # if not self.training:
         #     self.dist = dist
 
-        det_out = super().forward(self, det_out)
+        det_out = Detect.forward(self, x)
+
+        print(residual.shape, residual.sum().item(), residual.mean().item())
         
         if self.training:
             return det_out, residual
         elif self.export:
             return torch.cat([det_out, residual], 1)
         else: # inference
-            return (torch.cat([det_out[0], residual], 1), (det_out[1], residual))
+            # det_out is (y, x) where y: (bs, 4+nc, anchors), x: raw outputs
+            y, x_out = det_out[0], det_out[1]
+
+            # Extract decoded bbox (first 4 channels) and class probs (next nc channels)
+            dbox = y[:, :4, :]  # (bs, 4, anchors)
+            cls_probs = y[:, 4 : 4 + self.nc, :]  # (bs, nc, anchors)
+
+            # Predicted class index per anchor
+            cls_idx = cls_probs.argmax(dim=1)  # (bs, anchors)
+
+            # Per-anchor k (meters) using predicted class
+            # self.k has shape (nc,)
+            k_per = self.k[cls_idx]  # (bs, anchors)
+            k_per = k_per.unsqueeze(1)  # (bs, 1, anchors)
+
+            # Bbox height in pixels (y2 - y1)
+            bbox_h = (dbox[:, 3, :] - dbox[:, 1, :]).unsqueeze(1)  # (bs, 1, anchors)
+            bbox_h = torch.clamp(bbox_h, min=1e-6)
+
+            # Geometric estimate in meters
+            pred_geometric = k_per / bbox_h
+
+            # Apply residual (residual is expected in [-1,1] due to Tanh)
+            scale = 0.3
+            pred_dist = pred_geometric * (1 + scale * residual)
+
+            # Append final distance channel to outputs (meters)
+            out_y = torch.cat([y, pred_dist], dim=1)
+            return (out_y, (x_out, pred_dist))
 
 
 class Pose(Detect):
