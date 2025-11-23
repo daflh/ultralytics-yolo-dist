@@ -889,7 +889,13 @@ class v8DistLoss(v8DetectionLoss):
         - Use `stride_tensor` to convert bbox height (grid units) to pixels before computing geometric estimate.
         - Compute loss only on positive anchors indicated by `fg_mask`.
         """
-        max_dist = float(self.hyp.max_dist)
+        # safe max_dist (avoid division by zero or invalid hyp)
+        try:
+            max_dist = float(self.hyp.max_dist)
+            if not (max_dist > 0 and torch.isfinite(torch.tensor(max_dist))):
+                raise ValueError
+        except Exception:
+            max_dist = 100.0
         bs = gt_distances.shape[0]
 
         # skip if no gt distances
@@ -914,7 +920,7 @@ class v8DistLoss(v8DetectionLoss):
         # Compute bbox height in pixels: pred_bboxes currently in grid units -> multiply by stride
         bbox_h = (pred_bboxes[..., 3] - pred_bboxes[..., 1]).unsqueeze(2)
         bbox_h = bbox_h * stride_view  # now in pixels
-        bbox_h = torch.clamp(bbox_h, min=1e-6)
+        bbox_h = torch.clamp(bbox_h, min=1e-3)
 
         # Compute class index for k (per-anchor)
         cls_idx = gt_labels.long().flatten()[target_gt_idx]
@@ -923,6 +929,8 @@ class v8DistLoss(v8DetectionLoss):
         # Geometric estimate in meters, then normalize by max_dist
         eps = 1e-6
         pred_geometric_m = k / (bbox_h + eps)  # meters
+        # clamp geometric estimate to reasonable range to avoid extreme values from tiny bbox heights
+        pred_geometric_m = torch.clamp(pred_geometric_m, min=1e-3, max=max_dist * 10.0)
         pred_geometric = pred_geometric_m / max_dist  # normalized to [0,1]
 
         # Ensure residuals can be positive/negative (head should produce signed residuals)
@@ -931,15 +939,36 @@ class v8DistLoss(v8DetectionLoss):
 
         # Restrict loss computation to foreground anchors only
         sel = fg_mask.bool().unsqueeze(2)  # (b, h*w, 1)
-        if sel.sum() == 0:
+        # also require finite targets
+        finite_target = torch.isfinite(target_dist)
+        valid = sel & finite_target
+        if valid.sum() == 0:
             return torch.tensor(0.0, device=pred_residual.device)
 
-        # compute Huber loss only on selected anchors
-        pred_sel = pred_dist[sel]
-        target_sel = target_dist[sel]
-        dist_loss = self.huber(pred_sel, target_sel)
+        pred_sel = pred_dist[valid]
+        target_sel = target_dist[valid]
 
-        return dist_loss
+        # remove any remaining non-finite entries (defensive)
+        finite_mask = torch.isfinite(pred_sel) & torch.isfinite(target_sel)
+        if finite_mask.sum() == 0:
+            return torch.tensor(0.0, device=pred_residual.device)
+
+        pred_sel = pred_sel[finite_mask]
+        target_sel = target_sel[finite_mask]
+
+        # Huber (or configured huber) expects (N, 1) shapes; ensure dims
+        if pred_sel.dim() == 1:
+            pred_sel = pred_sel.unsqueeze(1)
+        if target_sel.dim() == 1:
+            target_sel = target_sel.unsqueeze(1)
+
+        dist_loss = self.huber(pred_sel, target_sel)
+        # if huber returns per-element loss, take mean
+        try:
+            # some huber implementations return scalar, others tensor
+            return dist_loss.mean() if dist_loss.dim() > 0 else dist_loss
+        except Exception:
+            return dist_loss
         
 
 class E2EDetectLoss:

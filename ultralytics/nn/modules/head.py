@@ -368,7 +368,7 @@ class Dist(Detect):
 
         det_out = Detect.forward(self, x)
 
-        print(residual.shape, residual.sum().item(), residual.mean().item())
+        #print(residual.shape, residual.sum().item(), residual.mean().item())
         
         if self.training:
             return det_out, residual
