@@ -1625,7 +1625,7 @@ class DistMetrics(DetMetrics):
     def print_dist_metrics(self):
         print(f"Distance metrics - MAE: {self._dist_metrics[0, 0]:.2f}, MAE(d>10): {self._dist_metrics[0, 4]:.2f}, " +
               f"MAE(d>25): {self._dist_metrics[0, 5]:.2f}, MAE(d>50): {self._dist_metrics[0, 6]:.2f}, " +
-              f"RMSE: {self._dist_metrics[0, 2]:.2f}, MDE: {self._dist_metrics[0, 3]:.2f}")
+              f"MRE: {self._dist_metrics[0, 1]:.2f}, RMSE: {self._dist_metrics[0, 2]:.2f}, MDE: {self._dist_metrics[0, 3]:.2f}")
         
     def class_result(self, i: int) -> list[float]:
         # Append per-class metrics for class index i (indexed by ap_class_index)

@@ -918,17 +918,18 @@ class v8DistLoss(v8DetectionLoss):
         target_dist = (target_dist / max_dist).unsqueeze(2)
 
         # Compute bbox height in pixels: pred_bboxes currently in grid units -> multiply by stride
-        bbox_h = (pred_bboxes[..., 3] - pred_bboxes[..., 1]).unsqueeze(2)
+        bbox_h = (pred_bboxes[..., 3]).unsqueeze(2)
         bbox_h = bbox_h * stride_view  # now in pixels
         bbox_h = torch.clamp(bbox_h, min=1e-3)
 
         # Compute class index for k (per-anchor)
         cls_idx = gt_labels.long().flatten()[target_gt_idx]
         k = self.model.model[-1].k[cls_idx].unsqueeze(2)  # meters
+        b = self.model.model[-1].b[cls_idx].unsqueeze(2)  # meters
 
         # Geometric estimate in meters, then normalize by max_dist
         eps = 1e-6
-        pred_geometric_m = k / (bbox_h + eps)  # meters
+        pred_geometric_m = (k / (bbox_h + eps)) + b  # meters
         # clamp geometric estimate to reasonable range to avoid extreme values from tiny bbox heights
         pred_geometric_m = torch.clamp(pred_geometric_m, min=1e-3, max=max_dist * 10.0)
         pred_geometric = pred_geometric_m / max_dist  # normalized to [0,1]
