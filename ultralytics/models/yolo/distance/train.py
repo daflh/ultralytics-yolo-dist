@@ -69,12 +69,11 @@ class DistTrainer(yolo.detect.DetectionTrainer):
 
         # Set the calculated geometric coefficients in the model head and freeze them
         for k, v in self.model.named_parameters():
+            # this two layers will be frozen during training, see BaseTrainer._setup_train()
             if ".geoa" in k:
                 v.data[:] = geoa
-                v.requires_grad = False # freeze
             if ".geob" in k:
                 v.data[:] = geob
-                v.requires_grad = False # freeze
 
     def setup_model(self):
         ckpt = yolo.detect.DetectionTrainer.setup_model(self)
