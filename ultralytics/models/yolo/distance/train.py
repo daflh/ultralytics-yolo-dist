@@ -62,7 +62,7 @@ class DistTrainer(yolo.detect.DetectionTrainer):
                 continue
 
             a, b = np.polyfit(inv_bh[bh_dz_pairs[:, 0] == ci], dz[bh_dz_pairs[:, 0] == ci], 1)
-            print(f"Class {ci} inverse model:  d_z ≈ {a:.6f} * (1/bh) + {b:.6f}")
+            # print(f"Class {ci} inverse model:  d_z ≈ {a:.6f} * (1/bh) + {b:.6f}")
 
             geoa[ci] = a
             geob[ci] = b

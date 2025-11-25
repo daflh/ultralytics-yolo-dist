@@ -348,10 +348,6 @@ class Dist(Detect):
         self.geoa = nn.Parameter(torch.ones(nc))
         self.geob = nn.Parameter(torch.zeros(nc))
 
-        # HARD-CODED JUST FOR TESTING
-        # self.geoa.data[:] = torch.tensor([6.5714,  5.6705,  8.0907, 10.9319,  4.5900,  6.4498, 14.3818,  1.0000,  1.0000])
-        # self.geob.data[:] = torch.tensor([0.0031, 0.0183, 0.0252, 0.0760, 0.0028, 0.0075, 0.0241, 0.0000, 0.0000])
-
         # Distance residual prediction head
         self.cv4 = nn.ModuleList(
             nn.Sequential(
