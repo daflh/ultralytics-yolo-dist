@@ -924,8 +924,20 @@ class v8DistLoss(v8DetectionLoss):
 
         # Compute class index for k (per-anchor)
         cls_idx = gt_labels.long().flatten()[target_gt_idx]
-        k = self.model.model[-1].k[cls_idx].unsqueeze(2)  # meters
-        b = self.model.model[-1].b[cls_idx].unsqueeze(2)  # meters
+        # The geometric parameters `geoa`/`geob` are precomputed and frozen before training.
+        # Read them as detached tensors on the same device/dtype as predictions to avoid
+        # device/dtype mismatches and to ensure they are treated as constants.
+        head = self.model.model[-1]
+        try:
+            geoa = head.geoa.detach().to(pred_residual.device).to(pred_residual.dtype)
+            geob = head.geob.detach().to(pred_residual.device).to(pred_residual.dtype)
+        except Exception:
+            # Fallback: access attributes directly if not available as parameters
+            geoa = torch.tensor(getattr(head, "geoa"), device=pred_residual.device, dtype=pred_residual.dtype)
+            geob = torch.tensor(getattr(head, "geob"), device=pred_residual.device, dtype=pred_residual.dtype)
+
+        k = geoa[cls_idx].unsqueeze(2)  # meters
+        b = geob[cls_idx].unsqueeze(2)  # meters
 
         # Geometric estimate in meters, then normalize by max_dist
         eps = 1e-6

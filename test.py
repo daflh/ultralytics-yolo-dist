@@ -24,7 +24,7 @@ def main():
 
     # model.load(weights="../weights/yolo11n.pt")
     # model.load(weights="../weights/yolo11n_KITTI_pretrained_ep600.pt")
-    model.load(weights="../weights/yolo11n-dist_3dc7dc7_ep250.pt")
+    model.load(weights="../weights/yolo11n-dist_2025-11-22-02_ep250.pt")
     # model.load(weights="../runs/dist/train129/weights/best.pt")
     # model.load(weights="./best.pt")
     
@@ -41,8 +41,8 @@ def main():
     # print(metrics)
     
     # detect_objects(model, "../datasets/street.jpg")
-    # detect_objects(model, "../datasets/005992.png", show_bev=True)
-    # detect_objects(model, "../datasets/000007.png")
+    # detect_objects(model, "../datasets/005992.png")
+    # detect_objects(model, "../datasets/000072.png")
     # detect_objects(model, "../datasets/new-york.mp4")
     # detect_objects(model, "../datasets/kitti-track-video/0014.mp4", 10, True)
     # detect_objects(model, "../datasets/kitti-sequence2.mp4")
