@@ -46,7 +46,6 @@ def img2label_paths(img_paths: list[str]) -> list[str]:
     """Convert image paths to label paths by replacing 'images' with 'labels' and extension with '.txt'."""
     labels_dir_name = 'labels'
     # labels_dir_name = 'labels_YOLO'
-    # labels_dir_name = 'labels_detect'
     sa, sb = f"{os.sep}images{os.sep}", f"{os.sep}{labels_dir_name}{os.sep}"  # /images/, /labels/ substrings
     return [sb.join(x.rsplit(sa, 1)).rsplit(".", 1)[0] + ".txt" for x in img_paths]
 
@@ -213,6 +212,8 @@ def verify_image_label(args: tuple) -> list:
                     lb = np.concatenate((classes.reshape(-1, 1), segments2boxes(segments)), 1)  # (cls, xywh)
                 lb = np.array(lb, dtype=np.float32)
             if nl := len(lb):
+                if distance and lb.shape[1] != 8:
+                    raise ValueError(f"got labels with {lb.shape[1]} columns, make sure it's formatted for distance task with 8 columns")
                 assert lb.shape[1] == expected_cols, f"labels require {expected_cols} columns, {lb.shape[1]} columns detected"
                 points = lb[:, 5:].reshape(-1, ndim)[:, :2] if keypoint else lb[:, 1:5] if distance else lb[:, 1:]
                 # Coordinate points check with 1% tolerance

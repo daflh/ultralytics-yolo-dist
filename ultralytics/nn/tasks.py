@@ -308,6 +308,15 @@ class BaseModel(torch.nn.Module):
             verbose (bool, optional): Whether to log the transfer progress.
         """
         model = weights["model"] if isinstance(weights, dict) else weights  # torchvision models are not dicts
+        src_task, curr_task = guess_model_task(model), guess_model_task(self)
+        src_nc, curr_nc = model.model[-1].nc, self.model[-1].nc
+        if src_task != curr_task:
+            LOGGER.warning(f"Transferring weights from a model of {src_task} to {curr_task}.")
+        else:
+            if src_nc != curr_nc:
+                LOGGER.warning(
+                    f"Transferring weights from a {curr_task} model with {src_nc} classes to {curr_nc} classes."
+                )
         csd = model.float().state_dict()  # checkpoint state_dict as FP32
         updated_csd = intersect_dicts(csd, self.state_dict())  # intersect
         self.load_state_dict(updated_csd, strict=False)  # load
