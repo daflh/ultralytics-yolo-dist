@@ -1,0 +1,22 @@
+# Ultralytics 🚀 AGPL-3.0 License - https://ultralytics.com/license
+
+# KITTI 3D Object Detection 2017 dataset https://www.cvlibs.net/datasets/kitti/eval_object.php?obj_benchmark=3d by KIT and TTI-C
+
+# Train/val/test sets as 1) dir: path/to/imgs, 2) file: path/to/imgs.txt, or 3) list: [path/to/imgs1, path/to/imgs2, ..]
+path: KITTI2017 # dataset root dir
+train: images/train # train images (relative to 'path') 5985 images
+val: images/val # val images (relative to 'path') 1496 images
+test: images/test # test images (optional) 7518 images
+
+# Classes for KITTI
+names:
+  0: Pedestrian
+  1: Car
+  2: Van
+  3: Truck
+  4: Person_sitting
+  5: Cyclist
+  6: Tram
+
+# Download script/URL (optional)
+download: https://s3.eu-central-1.amazonaws.com/avg-kitti/data_object_image_2.zip

@@ -1,6 +1,6 @@
 from ultralytics import YOLO
 from torchinfo import summary
-from utils import detect_objects, send_telegram_message
+from test_utils import detect_objects, send_telegram_message
 
 dataset_path = 'D:\\UGM\\tugas akhir\\3. skripsi\\code\\datasets'
 # dataset_path = '/home/ugm/Documents/zherk/datasets'
@@ -30,14 +30,14 @@ def main():
     
     # results = model.train(data=dataset_path + "/coco8.yaml", epochs=5, imgsz=640)
     # results = model.train(data=dataset_path + "/coco8-dist.yaml", epochs=5, imgsz=640)
-    # results = model.train(data=dataset_path + "/KITTI.yaml", epochs=5, imgsz=640, classes=[0,1,2,3,4,5,6])
-    results = model.train(data=dataset_path + "/KITTI.yaml", epochs=300, imgsz=640, batch=32, workers=12, classes=[0,1,2,3,4,5,6])
+    # results = model.train(data=dataset_path + "/KITTI.yaml", epochs=5, imgsz=640)
+    # results = model.train(data=dataset_path + "/KITTI.yaml", epochs=300, imgsz=640, batch=32, workers=12)
     # results = model.train(data=dataset_path + "/coco8-pose.yaml", epochs=5, imgsz=640)
     # print(results)
 
     # metrics = model.val(data=dataset_path + "/coco8.yaml", imgsz=640, batch=16, conf=0.25, iou=0.6)
     # metrics = model.val(data=dataset_path + "/coco8-dist.yaml", imgsz=640, batch=16, conf=0.25, iou=0.6)
-    # metrics = model.val(data=dataset_path + "/KITTI.yaml", imgsz=640, batch=16, conf=0.25, iou=0.6)
+    metrics = model.val(data=dataset_path + "/KITTI.yaml", imgsz=640, batch=16, conf=0.25, iou=0.6)
     # print(metrics)
     
     # detect_objects(model, "../datasets/street.jpg")
