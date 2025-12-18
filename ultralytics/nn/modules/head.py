@@ -359,10 +359,14 @@ class Dist(Detect):
 
     def forward(self, x: list[torch.Tensor]) -> torch.Tensor | tuple:
         bs = x[0].shape[0]  # batch size
-        dist_res = torch.cat([self.cv4[i](x[i]).view(bs, self.ne, -1) for i in range(self.nl)], dim=2)
-
+        geometric_params = (self.geoa.detach(), self.geob.detach())
+        pred_residual = torch.cat([self.cv4[i](x[i]).view(bs, self.ne, -1) for i in range(self.nl)], dim=2)
         det = Detect.forward(self, x)
 
+        if self.training:
+            return det, pred_residual, geometric_params
+        
+        # TODO: should put below code into a separate function (like _inference?)
         cls_probs = det[0][:, 4:4+self.nc, :]  # (bs, nc, anchors)
         cls_idx = cls_probs.argmax(dim=1)  # (bs, anchors)
         bbox_h = det[0][:, 3, :].unsqueeze(1)  # (bs, 1, anchors)
@@ -371,19 +375,21 @@ class Dist(Detect):
         # Predict pure geometric distance
         geo_a = self.geoa[cls_idx].unsqueeze(1)
         geo_b = self.geob[cls_idx].unsqueeze(1)
-        pred_geo = (geo_a / bbox_h) + geo_b
+        pred_geometric = (geo_a / bbox_h) + geo_b
 
-        # Apply residual distance
-        scale = 0.3
-        # pred_dist = pred_geometric * (1 + scale * dist_res)
-        pred_dist = pred_geo
+        # alpha = 0.3  # residual distance
+        # pred_dist = pred_geometric
+        # pred_dist = pred_geometric * (1 + pred_residual * alpha)
 
-        if self.training:
-            return det, dist_res
-        elif self.export:
-            return torch.cat([det, dist_res], 1)
-        else: # inference
-            return (torch.cat([det[0], pred_dist], 1), (det[1], pred_dist))
+        beta = 0.02
+        pred_dist = pred_geometric + beta * pred_residual
+        
+        if self.export:
+            return torch.cat([det, pred_dist], 1)
+        else:  # inference
+            # second element passed to criterion for loss calculation during val
+            return (torch.cat([det[0], pred_dist], 1),
+                    (det[1], pred_residual, geometric_params))
 
 
 class Pose(Detect):

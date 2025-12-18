@@ -793,21 +793,20 @@ class v8OBBLoss(v8DetectionLoss):
 class v8DistLoss(v8DetectionLoss):
     def __init__(self, model):
         super().__init__(model)
-        self.model = model
         self.mse = nn.MSELoss()
         # self.huber = HuberLoss()
         self.huber = nn.HuberLoss(delta=1.0) # you also need to change dist loss gain
 
     def __call__(self, preds: Any, batch: dict[str, torch.Tensor]) -> tuple[torch.Tensor, torch.Tensor]:
         loss = torch.zeros(4, device=self.device)  # box, dist, cls, dfl
-        feats, pred_dist = preds if isinstance(preds[0], list) else preds[1]
+        feats, pred_dist_residual, geometric_params = preds if isinstance(preds[0], list) else preds[1]
         pred_distri, pred_scores = torch.cat([xi.view(feats[0].shape[0], self.no, -1) for xi in feats], 2).split(
             (self.reg_max * 4, self.nc), 1
         )
 
         pred_scores = pred_scores.permute(0, 2, 1).contiguous()
         pred_distri = pred_distri.permute(0, 2, 1).contiguous()
-        pred_dist = pred_dist.permute(0, 2, 1).contiguous()
+        pred_dist_residual = pred_dist_residual.permute(0, 2, 1).contiguous()
 
         dtype = pred_scores.dtype
         batch_size = pred_scores.shape[0]
@@ -852,14 +851,15 @@ class v8DistLoss(v8DetectionLoss):
 
         n_max_boxes = gt_bboxes.shape[1]
         loss[1] = self.calculate_distance_loss(
-            pred_residual=pred_dist,
+            gt_labels=gt_labels,
             gt_distances=gt_dist,
+            target_scores=target_scores,
             target_gt_idx=target_gt_idx,
+            fg_mask=fg_mask,
             n_max_boxes=n_max_boxes,
             pred_bboxes=pred_bboxes,
-            gt_labels=gt_labels,
-            stride_tensor=stride_tensor,
-            fg_mask=fg_mask,
+            pred_residual=pred_dist_residual,
+            geometric_params=geometric_params
         )
 
         loss[0] *= self.hyp.box  # box gain
@@ -871,117 +871,95 @@ class v8DistLoss(v8DetectionLoss):
 
     def calculate_distance_loss(
         self,
-        pred_residual: torch.Tensor,  # predicted residuals [b, h*w, 1]
+        gt_labels: torch.Tensor,      # GT labels [b, n_max_boxes, 1]
         gt_distances: torch.Tensor,   # GT distances [b, n_max_boxes, 1]
+        target_scores: torch.Tensor,  # target quality scores (b, h*w)
         target_gt_idx: torch.Tensor,  # targets object index [b, h*w]
+        fg_mask: torch.Tensor,        # foreground mask (b, h*w)
         n_max_boxes: int,             # max number of boxes per batch
         pred_bboxes: torch.Tensor,    # predicted boxes [b, h*w, 4]
-        gt_labels: torch.Tensor,      # GT labels [b, n_max_boxes, 1]
-        stride_tensor: torch.Tensor,  # stride per anchor (h*w, 1) or (h*w,)
-        fg_mask: torch.Tensor,        # foreground mask (b, h*w)
+        pred_residual: torch.Tensor,  # predicted residuals [b, h*w, 1]
+        geometric_params: tuple[torch.Tensor, torch.Tensor],  # geometric distance parameters (geoa, geob)
     ) -> torch.Tensor:
-        """
-        Compute distance loss from a geometric estimate k / bbox_h (in pixels) plus a learned residual.
+        device = pred_residual.device
+        dtype = pred_residual.dtype
+        bs, hw, _ = pred_residual.shape
+        max_dist = float(self.hyp.max_dist)
 
-        Notes:
-        - `gt_distances` is normalized later by `max_dist`; we therefore normalize `pred_geometric`
-          by `max_dist` as well so both sides use the same scale.
-        - Use `stride_tensor` to convert bbox height (grid units) to pixels before computing geometric estimate.
-        - Compute loss only on positive anchors indicated by `fg_mask`.
-        """
-        # safe max_dist (avoid division by zero or invalid hyp)
-        try:
-            max_dist = float(self.hyp.max_dist)
-            if not (max_dist > 0 and torch.isfinite(torch.tensor(max_dist))):
-                raise ValueError
-        except Exception:
-            max_dist = 100.0
-        bs = gt_distances.shape[0]
+        if gt_distances.numel() == 0 or fg_mask.sum() == 0:
+            return torch.tensor(0.0, device=device)
 
-        # skip if no gt distances
-        if gt_distances.numel() == 0 or target_gt_idx.numel() == 0:
-            return torch.tensor(0.0, device=pred_residual.device)
+        batch_offset = torch.arange(bs, device=device).unsqueeze(1) * n_max_boxes
+        gt_idx_global = (target_gt_idx + batch_offset).long()  # [b, hw]
 
-        # expand/reshape stride to broadcast over batch and anchors
-        # stride_tensor is expected shape (h*w, 1) or (h*w,)
-        if stride_tensor.dim() == 1:
-            stride_view = stride_tensor.view(1, -1, 1)
-        else:
-            stride_view = stride_tensor.view(1, -1, 1)
+        target_dist = gt_distances.flatten()[gt_idx_global]
+        target_dist = (target_dist / max_dist).unsqueeze(2)    # [b, hw, 1]
 
-        batch_ind = torch.arange(end=bs, dtype=torch.int64, device=gt_distances.device)[..., None]
-        target_gt_idx = target_gt_idx + batch_ind * n_max_boxes  # (b, h*w)
-        target_gt_idx = target_gt_idx.long()  # enforce long dtype for indexing
+        bbox_h = pred_bboxes[..., 3].unsqueeze(2).detach()
+        bbox_h = torch.clamp(bbox_h, min=1e-6)
 
-        # target distances normalized to [0,1] by max_dist (same as before)
-        target_dist = gt_distances.flatten()[target_gt_idx]
-        target_dist = (target_dist / max_dist).unsqueeze(2)
+        cls_idx = gt_labels.long().flatten()[gt_idx_global]
 
-        # Compute bbox height in pixels: pred_bboxes currently in grid units -> multiply by stride
-        bbox_h = (pred_bboxes[..., 3]).unsqueeze(2)
-        bbox_h = bbox_h * stride_view  # now in pixels
-        bbox_h = torch.clamp(bbox_h, min=1e-3)
+        geoa, geob = geometric_params
+        geo_a = geoa.to(device=device, dtype=dtype)[cls_idx].unsqueeze(2)
+        geo_b = geob.to(device=device, dtype=dtype)[cls_idx].unsqueeze(2)
 
-        # Compute class index for k (per-anchor)
-        cls_idx = gt_labels.long().flatten()[target_gt_idx]
-        # The geometric parameters `geoa`/`geob` are precomputed and frozen before training.
-        # Read them as detached tensors on the same device/dtype as predictions to avoid
-        # device/dtype mismatches and to ensure they are treated as constants.
-        head = self.model.model[-1]
-        try:
-            geoa = head.geoa.detach().to(pred_residual.device).to(pred_residual.dtype)
-            geob = head.geob.detach().to(pred_residual.device).to(pred_residual.dtype)
-        except Exception:
-            # Fallback: access attributes directly if not available as parameters
-            geoa = torch.tensor(getattr(head, "geoa"), device=pred_residual.device, dtype=pred_residual.dtype)
-            geob = torch.tensor(getattr(head, "geob"), device=pred_residual.device, dtype=pred_residual.dtype)
+        pred_geo = torch.clamp(
+            (geo_a / bbox_h) + geo_b,
+            min=1e-3,
+            # max=max_dist * 10.0
+            max=1.5
+        )
 
-        k = geoa[cls_idx].unsqueeze(2)  # meters
-        b = geob[cls_idx].unsqueeze(2)  # meters
+        # beta = 0.05
+        # pred_dist = pred_geo + beta * pred_residual
+        # Residual learns geometry error
+        target_residual = (target_dist - pred_geo).detach()
 
-        # Geometric estimate in meters, then normalize by max_dist
-        eps = 1e-6
-        pred_geometric_m = (k / (bbox_h + eps)) + b  # meters
-        # clamp geometric estimate to reasonable range to avoid extreme values from tiny bbox heights
-        pred_geometric_m = torch.clamp(pred_geometric_m, min=1e-3, max=max_dist * 10.0)
-        pred_geometric = pred_geometric_m / max_dist  # normalized to [0,1]
+        valid_anchor = fg_mask & (target_gt_idx >= 0)
 
-        # Ensure residuals can be positive/negative (head should produce signed residuals)
-        scale = 0.3  # scale factor for residual
-        pred_dist = pred_geometric * (1 + scale * pred_residual)
+        # anchor quality = max class score
+        anchor_quality = target_scores.max(dim=2)[0]
 
-        # Restrict loss computation to foreground anchors only
-        sel = fg_mask.bool().unsqueeze(2)  # (b, h*w, 1)
-        # also require finite targets
-        finite_target = torch.isfinite(target_dist)
-        valid = sel & finite_target
+        num_gt_total = bs * n_max_boxes
+        score_table = torch.full(
+            (num_gt_total, hw),
+            -1e8,
+            device=device
+        )
+
+        flat_gt = gt_idx_global[valid_anchor]
+        flat_anchor = torch.nonzero(valid_anchor, as_tuple=False)[:, 1]
+        flat_score = anchor_quality[valid_anchor]
+
+        score_table[flat_gt, flat_anchor] = flat_score
+
+        # Get one anchor per GT
+        best_anchor_per_gt = score_table.argmax(dim=1)
+
+        sel = torch.zeros((bs, hw), dtype=torch.bool, device=device)
+
+        valid_gt = (gt_distances[..., 0] > 0).view(-1)
+        gt_ids = torch.nonzero(valid_gt, as_tuple=False).squeeze(1)
+        anchor_ids = best_anchor_per_gt[gt_ids]
+        b_ids = gt_ids // n_max_boxes
+
+        sel[b_ids, anchor_ids] = True
+        sel = sel.unsqueeze(2)
+
+        valid = sel & torch.isfinite(target_residual)
         if valid.sum() == 0:
-            return torch.tensor(0.0, device=pred_residual.device)
+            return torch.tensor(0.0, device=device)
 
-        pred_sel = pred_dist[valid]
-        target_sel = target_dist[valid]
+        pred_sel = pred_residual[valid]
+        target_sel = target_residual[valid]
 
-        # remove any remaining non-finite entries (defensive)
-        finite_mask = torch.isfinite(pred_sel) & torch.isfinite(target_sel)
-        if finite_mask.sum() == 0:
-            return torch.tensor(0.0, device=pred_residual.device)
-
-        pred_sel = pred_sel[finite_mask]
-        target_sel = target_sel[finite_mask]
-
-        # Huber (or configured huber) expects (N, 1) shapes; ensure dims
         if pred_sel.dim() == 1:
             pred_sel = pred_sel.unsqueeze(1)
         if target_sel.dim() == 1:
             target_sel = target_sel.unsqueeze(1)
 
-        dist_loss = self.huber(pred_sel, target_sel)
-        # if huber returns per-element loss, take mean
-        try:
-            # some huber implementations return scalar, others tensor
-            return dist_loss.mean() if dist_loss.dim() > 0 else dist_loss
-        except Exception:
-            return dist_loss
+        return self.huber(pred_sel, target_sel).mean()
         
 
 class E2EDetectLoss:
