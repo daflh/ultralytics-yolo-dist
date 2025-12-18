@@ -1613,14 +1613,19 @@ class DistMetrics(DetMetrics):
     def keys(self) -> list[str]:
         return DetMetrics.keys.fget(self) + [
             "metrics/MAE(D)", # Mean Absolute Error
-            # "metrics/MRE(D)", # Mean Relative Error, suspectible to outliers, MAE is preferred
-            "metrics/MDE(D)" # Mean Distance Error, like MAE but penalize FN
+            "metrics/MRE(D)", # Mean Relative Error, suspectible to outliers
+            # "metrics/MDE(D)" # Mean Distance Error, like MAE but penalize FN
         ]
+    
+    # @property
+    # def fitness(self) -> float:
+    #     # TODO: weighted combination of detection and distance metrics
+    #     return 1 / self._dist_metrics[0, 0] # get MAE
 
     def mean_results(self) -> list[float]:
         # Compute metrics during process()
         base = DetMetrics.mean_results(self)
-        return base + [float(self._dist_metrics[0, 0]), float(self._dist_metrics[0, 3])] # MAE, MDE
+        return base + [float(self._dist_metrics[0, 0]), float(self._dist_metrics[0, 1])] # MAE, MRE
 
     def print_dist_metrics(self):
         print(f"Distance metrics - MAE: {self._dist_metrics[0, 0]:.2f}, MAE(d>10): {self._dist_metrics[0, 4]:.2f}, " +

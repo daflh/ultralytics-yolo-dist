@@ -274,7 +274,12 @@ class BaseTrainer:
             if isinstance(self.args.freeze, int)
             else []
         )
-        always_freeze_names = [".dfl", ".geoa", ".geob"]  # always freeze these layers
+        always_freeze_names = [".dfl"]  # always freeze these layers
+        
+        # freeze other layers for distance estimation (not recommended, only for model experiment/analysis)
+        # freeze_list += range(23)
+        # always_freeze_names += [".23.cv2", ".23.cv3"]
+
         freeze_layer_names = [f"model.{x}." for x in freeze_list] + always_freeze_names
         self.freeze_layer_names = freeze_layer_names
         for k, v in self.model.named_parameters():

@@ -134,7 +134,7 @@ class DistValidator(DetectionValidator):
             "mAP50",
             "mAP50-95)",
             "Dist(MAE",
-            "MDE)",
+            "MRE)",
         )
     
     def print_results(self) -> None:

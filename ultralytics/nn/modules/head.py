@@ -343,53 +343,80 @@ class Dist(Detect):
     def __init__(self, nc: int = 7, ch: tuple = ()):
         super().__init__(nc, ch)
         self.ne = 1  # number of extra parameters (1 number for absolute distance)
+        geo_ch = 16  # number of geometric feature channels
 
-        # Geometric scale for distance estimation
-        self.geoa = nn.Parameter(torch.ones(nc))
-        self.geob = nn.Parameter(torch.zeros(nc))
+        # class-specific height embeddings
+        self.class_height = nn.Parameter(torch.ones(nc))
+
+        # geometry encoder
+        self.geo_embed = nn.ModuleList(
+            nn.Sequential(
+                nn.Conv2d(4, geo_ch, 1), nn.ReLU()
+            ) for _ in ch
+        )
 
         # Distance residual prediction head
         self.cv4 = nn.ModuleList(
             nn.Sequential(
-                nn.Conv2d(x, 64, 1), nn.ReLU(),
-                nn.Conv2d(64, 32, 1), nn.ReLU(),
-                nn.Conv2d(32, 1, 1), nn.Tanh() # clamp to [-1, 1]
+                nn.Conv2d(x + geo_ch, 128, 1), nn.ReLU(),
+                nn.Conv2d(128, 64, 1), nn.ReLU(),
+                nn.Conv2d(64, 1, 1)
             ) for x in ch
         )
 
     def forward(self, x: list[torch.Tensor]) -> torch.Tensor | tuple:
         bs = x[0].shape[0]  # batch size
-        geometric_params = (self.geoa.detach(), self.geob.detach())
-        pred_residual = torch.cat([self.cv4[i](x[i]).view(bs, self.ne, -1) for i in range(self.nl)], dim=2)
+
+        dist_preds = []
+        # distance predictions per feature map scale (usually nl=3 scales)
+        for i in range(self.nl):
+            # get outputs bbox in grid units per feature map
+            raw_bbox_pred = self.cv2[i](x[i])  # (bs, reg_max*4, h, w)
+            _, _, x_h, x_w = raw_bbox_pred.shape
+            bbox_pred = self.dfl(raw_bbox_pred.view(bs, self.reg_max * 4, -1))
+            bbox_pred = bbox_pred.view(bs, 4, x_h, x_w)  # (bs, 4, h, w)
+            _, b_t, _, b_b = bbox_pred.unbind(1)
+
+            h_grid = b_t + b_b  # bbox height in grid units
+            y_base = b_b  # bbox bottom
+
+            # cls logits for this scale
+            cls_logits = self.cv3[i](x[i])  # (bs, nc, h, w)
+            cls_prob = cls_logits.sigmoid().detach()
+            # expected physical height (scalar per anchor)
+            expected_h = torch.sum(
+                cls_prob * self.class_height.view(1, -1, 1, 1),
+                dim=1
+            )
+
+            # construct geometric feature
+            geo = torch.stack([
+                h_grid,  # apparent height
+                torch.log(h_grid + 1e-6),  # log height to linearize perspective
+                y_base,  # base point y for ground plane/horizon geometry
+                expected_h  # soft class conditioning
+            ], dim=1)
+
+            geo_feat = self.geo_embed[i](geo)
+            # fuse raw features with geometry bbox info
+            fused = torch.cat([x[i], geo_feat], dim=1)
+
+            raw_dist = self.cv4[i](fused)
+            dist_preds.append(raw_dist.view(bs, self.ne, -1))
+
+        # concatenate all distance predictions across feature map scales
+        pred_dist = torch.cat(dist_preds, dim=2)
         det = Detect.forward(self, x)
 
         if self.training:
-            return det, pred_residual, geometric_params
-        
-        # TODO: should put below code into a separate function (like _inference?)
-        cls_probs = det[0][:, 4:4+self.nc, :]  # (bs, nc, anchors)
-        cls_idx = cls_probs.argmax(dim=1)  # (bs, anchors)
-        bbox_h = det[0][:, 3, :].unsqueeze(1)  # (bs, 1, anchors)
-        bbox_h = torch.clamp(bbox_h, min=1e-6)  # avoid division by zero
-
-        # Predict pure geometric distance
-        geo_a = self.geoa[cls_idx].unsqueeze(1)
-        geo_b = self.geob[cls_idx].unsqueeze(1)
-        pred_geometric = (geo_a / bbox_h) + geo_b
-
-        # alpha = 0.3  # residual distance
-        # pred_dist = pred_geometric
-        # pred_dist = pred_geometric * (1 + pred_residual * alpha)
-
-        beta = 0.02
-        pred_dist = pred_geometric + beta * pred_residual
+            return det, pred_dist
         
         if self.export:
             return torch.cat([det, pred_dist], 1)
         else:  # inference
             # second element passed to criterion for loss calculation during val
             return (torch.cat([det[0], pred_dist], 1),
-                    (det[1], pred_residual, geometric_params))
+                    (det[1], pred_dist))
 
 
 class Pose(Detect):

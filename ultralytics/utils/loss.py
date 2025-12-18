@@ -193,19 +193,6 @@ class KeypointLoss(nn.Module):
         return (kpt_loss_factor.view(-1, 1) * ((1 - torch.exp(-e)) * kpt_mask)).mean()
 
 
-class HuberLoss(nn.Module):
-    def __init__(self, c = 0.03):
-        super(HuberLoss, self).__init__()
-        self.c = c
-
-    def forward(self, y_true, y_pred):
-        error = y_true - y_pred
-        abs_error = torch.abs(error)
-        mask = abs_error < self.c
-        huber_loss = torch.where(mask, abs_error, (error ** 2 + self.c ** 2) / (2 * self.c))
-        return torch.mean(huber_loss)
-
-
 class v8DetectionLoss:
     """Criterion class for computing training losses for YOLOv8 object detection."""
 
@@ -794,19 +781,18 @@ class v8DistLoss(v8DetectionLoss):
     def __init__(self, model):
         super().__init__(model)
         self.mse = nn.MSELoss()
-        # self.huber = HuberLoss()
-        self.huber = nn.HuberLoss(delta=1.0) # you also need to change dist loss gain
+        self.huber = nn.HuberLoss(delta=1.0, reduction="none")
 
     def __call__(self, preds: Any, batch: dict[str, torch.Tensor]) -> tuple[torch.Tensor, torch.Tensor]:
         loss = torch.zeros(4, device=self.device)  # box, dist, cls, dfl
-        feats, pred_dist_residual, geometric_params = preds if isinstance(preds[0], list) else preds[1]
+        feats, pred_dist = preds if isinstance(preds[0], list) else preds[1]
         pred_distri, pred_scores = torch.cat([xi.view(feats[0].shape[0], self.no, -1) for xi in feats], 2).split(
             (self.reg_max * 4, self.nc), 1
         )
 
         pred_scores = pred_scores.permute(0, 2, 1).contiguous()
         pred_distri = pred_distri.permute(0, 2, 1).contiguous()
-        pred_dist_residual = pred_dist_residual.permute(0, 2, 1).contiguous()
+        pred_dist = pred_dist.permute(0, 2, 1).contiguous()
 
         dtype = pred_scores.dtype
         batch_size = pred_scores.shape[0]
@@ -851,15 +837,11 @@ class v8DistLoss(v8DetectionLoss):
 
         n_max_boxes = gt_bboxes.shape[1]
         loss[1] = self.calculate_distance_loss(
-            gt_labels=gt_labels,
             gt_distances=gt_dist,
-            target_scores=target_scores,
             target_gt_idx=target_gt_idx,
             fg_mask=fg_mask,
             n_max_boxes=n_max_boxes,
-            pred_bboxes=pred_bboxes,
-            pred_residual=pred_dist_residual,
-            geometric_params=geometric_params
+            pred_dist=pred_dist
         )
 
         loss[0] *= self.hyp.box  # box gain
@@ -871,95 +853,41 @@ class v8DistLoss(v8DetectionLoss):
 
     def calculate_distance_loss(
         self,
-        gt_labels: torch.Tensor,      # GT labels [b, n_max_boxes, 1]
         gt_distances: torch.Tensor,   # GT distances [b, n_max_boxes, 1]
-        target_scores: torch.Tensor,  # target quality scores (b, h*w)
         target_gt_idx: torch.Tensor,  # targets object index [b, h*w]
         fg_mask: torch.Tensor,        # foreground mask (b, h*w)
         n_max_boxes: int,             # max number of boxes per batch
-        pred_bboxes: torch.Tensor,    # predicted boxes [b, h*w, 4]
-        pred_residual: torch.Tensor,  # predicted residuals [b, h*w, 1]
-        geometric_params: tuple[torch.Tensor, torch.Tensor],  # geometric distance parameters (geoa, geob)
+        pred_dist: torch.Tensor,      # predicted distance [b, h*w, 1]
     ) -> torch.Tensor:
-        device = pred_residual.device
-        dtype = pred_residual.dtype
-        bs, hw, _ = pred_residual.shape
+        device = pred_dist.device
+        bs = pred_dist.shape[0]
         max_dist = float(self.hyp.max_dist)
 
-        if gt_distances.numel() == 0 or fg_mask.sum() == 0:
+        if fg_mask.sum() == 0:
             return torch.tensor(0.0, device=device)
 
+        # flatten GT indexing
         batch_offset = torch.arange(bs, device=device).unsqueeze(1) * n_max_boxes
-        gt_idx_global = (target_gt_idx + batch_offset).long()  # [b, hw]
+        gt_idx_global = (target_gt_idx + batch_offset).long()
+
+        # normalize predicted distances, set max to 1.5 to avoid huge loss
+        pred_dist = torch.clamp(pred_dist, 1e-3, 1.5)
 
         target_dist = gt_distances.flatten()[gt_idx_global]
-        target_dist = (target_dist / max_dist).unsqueeze(2)    # [b, hw, 1]
+        target_dist = target_dist.unsqueeze(2) / max_dist
 
-        bbox_h = pred_bboxes[..., 3].unsqueeze(2).detach()
-        bbox_h = torch.clamp(bbox_h, min=1e-6)
-
-        cls_idx = gt_labels.long().flatten()[gt_idx_global]
-
-        geoa, geob = geometric_params
-        geo_a = geoa.to(device=device, dtype=dtype)[cls_idx].unsqueeze(2)
-        geo_b = geob.to(device=device, dtype=dtype)[cls_idx].unsqueeze(2)
-
-        pred_geo = torch.clamp(
-            (geo_a / bbox_h) + geo_b,
-            min=1e-3,
-            # max=max_dist * 10.0
-            max=1.5
-        )
-
-        # beta = 0.05
-        # pred_dist = pred_geo + beta * pred_residual
-        # Residual learns geometry error
-        target_residual = (target_dist - pred_geo).detach()
-
-        valid_anchor = fg_mask & (target_gt_idx >= 0)
-
-        # anchor quality = max class score
-        anchor_quality = target_scores.max(dim=2)[0]
-
-        num_gt_total = bs * n_max_boxes
-        score_table = torch.full(
-            (num_gt_total, hw),
-            -1e8,
-            device=device
-        )
-
-        flat_gt = gt_idx_global[valid_anchor]
-        flat_anchor = torch.nonzero(valid_anchor, as_tuple=False)[:, 1]
-        flat_score = anchor_quality[valid_anchor]
-
-        score_table[flat_gt, flat_anchor] = flat_score
-
-        # Get one anchor per GT
-        best_anchor_per_gt = score_table.argmax(dim=1)
-
-        sel = torch.zeros((bs, hw), dtype=torch.bool, device=device)
-
-        valid_gt = (gt_distances[..., 0] > 0).view(-1)
-        gt_ids = torch.nonzero(valid_gt, as_tuple=False).squeeze(1)
-        anchor_ids = best_anchor_per_gt[gt_ids]
-        b_ids = gt_ids // n_max_boxes
-
-        sel[b_ids, anchor_ids] = True
-        sel = sel.unsqueeze(2)
-
-        valid = sel & torch.isfinite(target_residual)
+        valid = fg_mask.unsqueeze(2) & torch.isfinite(target_dist) & torch.isfinite(pred_dist)
         if valid.sum() == 0:
             return torch.tensor(0.0, device=device)
+        
+        pred_dist = pred_dist[valid]
+        target_dist = target_dist[valid]
 
-        pred_sel = pred_residual[valid]
-        target_sel = target_residual[valid]
+        # distance-aware weighting to improve near object accuracy
+        weight = 1.0 / (target_dist + 0.05)
+        loss = weight * self.huber(pred_dist, target_dist)
 
-        if pred_sel.dim() == 1:
-            pred_sel = pred_sel.unsqueeze(1)
-        if target_sel.dim() == 1:
-            target_sel = target_sel.unsqueeze(1)
-
-        return self.huber(pred_sel, target_sel).mean()
+        return loss.mean()
         
 
 class E2EDetectLoss:
