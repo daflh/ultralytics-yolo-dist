@@ -393,14 +393,13 @@ class BaseTrainer:
                 self.train_loader.sampler.set_epoch(epoch)
             pbar = enumerate(self.train_loader)
             # Update dataloader attributes (optional)
-            if epoch == (self.epochs - self.args.close_mosaic):
+            if self.args.task != "dist" and epoch == (self.epochs - self.args.close_mosaic):
                 self._close_dataloader_mosaic()
                 self.train_loader.reset()
-            if self.args.task == "dist":
-                is_passed = epoch == 0 and self.epochs <= self.args.close_dist_sensitive
-                if epoch == (self.epochs - self.args.close_dist_sensitive) or is_passed:
-                    self._close_dataloader_dist_sensitive()
-                    self.train_loader.reset()
+            if self.args.task == "dist" and ((epoch == 0 and self.epochs <= self.args.close_dist_sensitive) or
+                                            epoch == (self.epochs - self.args.close_dist_sensitive)):
+                self._close_dataloader_dist_sensitive()
+                self.train_loader.reset()
 
             if RANK in {-1, 0}:
                 LOGGER.info(self.progress_string())
@@ -892,7 +891,7 @@ class BaseTrainer:
             self.epochs += ckpt["epoch"]  # finetune additional epochs
         self._load_checkpoint_state(ckpt)
         self.start_epoch = start_epoch
-        if start_epoch > (self.epochs - self.args.close_mosaic):
+        if self.args.task != "dist" and start_epoch > (self.epochs - self.args.close_mosaic):
             self._close_dataloader_mosaic()
         if self.args.task == "dist" and start_epoch > (self.epochs - self.args.close_dist_sensitive):
             self._close_dataloader_dist_sensitive()

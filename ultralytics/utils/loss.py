@@ -800,7 +800,11 @@ class v8DistLoss(v8DetectionLoss):
         anchor_points, stride_tensor = make_anchors(feats, self.stride, 0.5)
 
         # Targets
-        distances = batch["distances"][:, 2] # TODO: use euclidean distance (can be switched)
+        use_euclidean = bool(self.hyp.use_euclidean)
+        if use_euclidean:
+            distances = torch.linalg.vector_norm(batch["distances"], ord=2, dim=1)
+        else:
+            distances = batch["distances"][:, 2]  # only use z-axis distance
         targets = torch.cat((batch["batch_idx"].view(-1, 1), batch["cls"].view(-1, 1), batch["bboxes"], distances.view(-1, 1)), 1)
         targets = self.preprocess(targets, batch_size, scale_tensor=imgsz[[1, 0, 1, 0]])
         gt_labels, gt_bboxes, gt_dist = targets.split((1, 4, 1), 2)
