@@ -25,6 +25,7 @@ def main():
     # model.load(weights="../weights/yolo11n.pt")
     # model.load(weights="../weights/yolo11n_KITTI_pretrained_ep600.pt")
     model.load(weights="../weights/yolo11n_KITTI_2025-12-09-01_ep500.pt")
+    # model.load(weights="../weights/yolo11n-dist_2025-12-18-01_ep80.pt")
     # model.load(weights="./runs/dist/train104/weights/best.pt")
     # model.load(weights="./best.pt")
     
@@ -40,7 +41,7 @@ def main():
     # metrics = model.val(data=dataset_path + "/coco8.yaml", imgsz=640, batch=16)
     # print(metrics)
     
-    # detect_objects(model, "../datasets/street.jpg")
+    detect_objects(model, "../datasets/street.jpg")
     # detect_objects(model, "../datasets/005992.png")
     # detect_objects(model, "../datasets/000072.png")
     # detect_objects(model, "../datasets/new-york.mp4")

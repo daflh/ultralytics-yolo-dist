@@ -256,6 +256,30 @@ class YOLODataset(BaseDataset):
         hyp.cutmix = 0.0
         self.transforms = self.build_transforms(hyp)
 
+    def close_dist_sensitive(self, hyp: dict) -> None:
+        """
+        Disable distance-sensitive augmentations by setting their probabilities to 0.0.
+        """
+        # Geometric augmentations
+        hyp.degrees = 0.0
+        hyp.translate = 0.0
+        hyp.scale = 0.0
+        hyp.shear = 0.0
+        hyp.perspective = 0.0
+        hyp.flipud = 0.0
+        hyp.fliplr = 0.0
+
+        # Spatial mixing augmentations
+        hyp.mosaic = 0.0
+        hyp.mixup = 0.0
+        hyp.cutmix = 0.0
+        hyp.copy_paste = 0.0
+
+        hyp.multi_scale = False  # Multi-scale training
+        hyp.augment = False  # Test-time augmentation
+
+        self.transforms = self.build_transforms(hyp)
+
     def update_labels_info(self, label: dict) -> dict:
         """
         Update label format for different tasks.

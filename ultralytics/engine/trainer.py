@@ -396,6 +396,11 @@ class BaseTrainer:
             if epoch == (self.epochs - self.args.close_mosaic):
                 self._close_dataloader_mosaic()
                 self.train_loader.reset()
+            if self.args.task == "dist":
+                is_passed = epoch == 0 and self.epochs <= self.args.close_dist_sensitive
+                if epoch == (self.epochs - self.args.close_dist_sensitive) or is_passed:
+                    self._close_dataloader_dist_sensitive()
+                    self.train_loader.reset()
 
             if RANK in {-1, 0}:
                 LOGGER.info(self.progress_string())
@@ -815,6 +820,7 @@ class BaseTrainer:
                     "batch",
                     "device",
                     "close_mosaic",
+                    "close_dist_sensitive",
                 ):  # allow arg updates to reduce memory or update device on resume
                     if k in overrides:
                         setattr(self.args, k, overrides[k])
@@ -888,6 +894,8 @@ class BaseTrainer:
         self.start_epoch = start_epoch
         if start_epoch > (self.epochs - self.args.close_mosaic):
             self._close_dataloader_mosaic()
+        if self.args.task == "dist" and start_epoch > (self.epochs - self.args.close_dist_sensitive):
+            self._close_dataloader_dist_sensitive()
 
     def _close_dataloader_mosaic(self):
         """Update dataloaders to stop using mosaic augmentation."""
@@ -896,6 +904,14 @@ class BaseTrainer:
         if hasattr(self.train_loader.dataset, "close_mosaic"):
             LOGGER.info("Closing dataloader mosaic")
             self.train_loader.dataset.close_mosaic(hyp=copy(self.args))
+
+    def _close_dataloader_dist_sensitive(self):
+        """Update dataloaders to stop using distance sensitive augmentation."""
+        if hasattr(self.train_loader.dataset, "dist_sensitive"):
+            self.train_loader.dataset.dist_sensitive = False
+        if hasattr(self.train_loader.dataset, "close_dist_sensitive"):
+            LOGGER.info("Closing dataloader distance sensitive augmentation")
+            self.train_loader.dataset.close_dist_sensitive(hyp=copy(self.args))
 
     def build_optimizer(self, model, name="auto", lr=0.001, momentum=0.9, decay=1e-5, iterations=1e5):
         """

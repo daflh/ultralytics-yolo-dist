@@ -48,6 +48,7 @@ dropout: 0.0 # (float) dropout for classification head (classify only)
 
 # Distance Estimation
 max_dist: 100.0 # (float) maximum distance for training and inference
+close_dist_sensitive: 75 # (int) disable distance-sensitive augmentation for final N epochs (0 to keep enabled)
 
 # Val/Test settings ----------------------------------------------------------------------------------------------------
 val: True # (bool) run validation/testing during training
