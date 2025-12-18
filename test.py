@@ -1,6 +1,6 @@
 from ultralytics import YOLO
 from torchinfo import summary
-from utils import detect_objects, send_telegram_message
+from test_utils import detect_objects, send_telegram_message
 
 dataset_path = 'D:\\UGM\\tugas akhir\\3. skripsi\\code\\datasets'
 # dataset_path = '/home/ugm/Documents/zherk/datasets'
@@ -24,25 +24,26 @@ def main():
 
     # model.load(weights="../weights/yolo11n.pt")
     # model.load(weights="../weights/yolo11n_KITTI_pretrained_ep600.pt")
-    model.load(weights="../weights/yolo11n-dist_3dc7dc7_ep250.pt")
-    # model.load(weights="../runs/dist/train129/weights/best.pt")
+    model.load(weights="../weights/yolo11n_KITTI_2025-12-09-01_ep500.pt")
+    # model.load(weights="../weights/yolo11n-dist_2025-12-18-01_ep80.pt")
+    # model.load(weights="./runs/dist/train104/weights/best.pt")
     # model.load(weights="./best.pt")
     
-    # results = model.train(data=dataset_path + "/coco8.yaml", epochs=5, imgsz=640)
+    # results = model.train(data=dataset_path + "/KITTI.yaml", epochs=300, imgsz=640, batch=32, workers=12)
+    # results = model.train(data=dataset_path + "/KITTI.yaml", epochs=5, imgsz=640)
     # results = model.train(data=dataset_path + "/coco8-dist.yaml", epochs=5, imgsz=640)
-    # results = model.train(data=dataset_path + "/KITTI.yaml", epochs=5, imgsz=640, classes=[0,1,2,3,4,5,6])
-    results = model.train(data=dataset_path + "/KITTI.yaml", epochs=300, imgsz=640, batch=32, workers=12, classes=[0,1,2,3,4,5,6])
+    # results = model.train(data=dataset_path + "/coco8.yaml", epochs=5, imgsz=640)
     # results = model.train(data=dataset_path + "/coco8-pose.yaml", epochs=5, imgsz=640)
     # print(results)
 
-    # metrics = model.val(data=dataset_path + "/coco8.yaml", imgsz=640, batch=16, conf=0.25, iou=0.6)
-    # metrics = model.val(data=dataset_path + "/coco8-dist.yaml", imgsz=640, batch=16, conf=0.25, iou=0.6)
-    # metrics = model.val(data=dataset_path + "/KITTI.yaml", imgsz=640, batch=16, conf=0.25, iou=0.6)
+    # metrics = model.val(data=dataset_path + "/KITTI.yaml", imgsz=640, batch=32)
+    # metrics = model.val(data=dataset_path + "/coco8-dist.yaml", imgsz=640, batch=16)
+    # metrics = model.val(data=dataset_path + "/coco8.yaml", imgsz=640, batch=16)
     # print(metrics)
     
-    # detect_objects(model, "../datasets/street.jpg")
-    # detect_objects(model, "../datasets/005992.png", show_bev=True)
-    # detect_objects(model, "../datasets/000007.png")
+    detect_objects(model, "../datasets/street.jpg")
+    # detect_objects(model, "../datasets/005992.png")
+    # detect_objects(model, "../datasets/000072.png")
     # detect_objects(model, "../datasets/new-york.mp4")
     # detect_objects(model, "../datasets/kitti-track-video/0014.mp4", 10, True)
     # detect_objects(model, "../datasets/kitti-sequence2.mp4")

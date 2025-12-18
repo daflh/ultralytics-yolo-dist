@@ -134,7 +134,7 @@ class DistValidator(DetectionValidator):
             "mAP50",
             "mAP50-95)",
             "Dist(MAE",
-            "MDE)",
+            "MRE)",
         )
     
     def print_results(self) -> None:
@@ -143,7 +143,6 @@ class DistValidator(DetectionValidator):
     
     def plot_predictions(self, batch: dict[str, Any], preds: list[torch.Tensor], ni: int) -> None:
         for p in preds:
-            # TODO: fix this duplicated `xywh2xyxy`
             p["bboxes"][:, :4] = ops.xywh2xyxy(p["bboxes"][:, :4])  # convert to xyxy format for plotting
         super().plot_predictions(batch, preds, ni)  # plot bboxes
     

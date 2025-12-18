@@ -193,19 +193,6 @@ class KeypointLoss(nn.Module):
         return (kpt_loss_factor.view(-1, 1) * ((1 - torch.exp(-e)) * kpt_mask)).mean()
 
 
-class HuberLoss(nn.Module):
-    def __init__(self, c = 0.03):
-        super(HuberLoss, self).__init__()
-        self.c = c
-
-    def forward(self, y_true, y_pred):
-        error = y_true - y_pred
-        abs_error = torch.abs(error)
-        mask = abs_error < self.c
-        huber_loss = torch.where(mask, abs_error, (error ** 2 + self.c ** 2) / (2 * self.c))
-        return torch.mean(huber_loss)
-
-
 class v8DetectionLoss:
     """Criterion class for computing training losses for YOLOv8 object detection."""
 
@@ -794,8 +781,7 @@ class v8DistLoss(v8DetectionLoss):
     def __init__(self, model):
         super().__init__(model)
         self.mse = nn.MSELoss()
-        self.huber = HuberLoss()
-        # self.huber = nn.HuberLoss(delta=1.0) # you also need to change dist loss gain
+        self.huber = nn.HuberLoss(delta=1.0, reduction="none")
 
     def __call__(self, preds: Any, batch: dict[str, torch.Tensor]) -> tuple[torch.Tensor, torch.Tensor]:
         loss = torch.zeros(4, device=self.device)  # box, dist, cls, dfl
@@ -814,7 +800,11 @@ class v8DistLoss(v8DetectionLoss):
         anchor_points, stride_tensor = make_anchors(feats, self.stride, 0.5)
 
         # Targets
-        distances = batch["distances"][:, 2] # TODO: use euclidean distance (can be switched)
+        use_euclidean = bool(self.hyp.use_euclidean)
+        if use_euclidean:
+            distances = torch.linalg.vector_norm(batch["distances"], ord=2, dim=1)
+        else:
+            distances = batch["distances"][:, 2]  # only use z-axis distance
         targets = torch.cat((batch["batch_idx"].view(-1, 1), batch["cls"].view(-1, 1), batch["bboxes"], distances.view(-1, 1)), 1)
         targets = self.preprocess(targets, batch_size, scale_tensor=imgsz[[1, 0, 1, 0]])
         gt_labels, gt_bboxes, gt_dist = targets.split((1, 4, 1), 2)
@@ -850,7 +840,13 @@ class v8DistLoss(v8DetectionLoss):
             )
 
         n_max_boxes = gt_bboxes.shape[1]
-        loss[1] = self.calculate_distance_loss(pred_dist, gt_dist, target_gt_idx, n_max_boxes)
+        loss[1] = self.calculate_distance_loss(
+            gt_distances=gt_dist,
+            target_gt_idx=target_gt_idx,
+            fg_mask=fg_mask,
+            n_max_boxes=n_max_boxes,
+            pred_dist=pred_dist
+        )
 
         loss[0] *= self.hyp.box  # box gain
         loss[1] *= self.hyp.dist # dist gain
@@ -861,27 +857,41 @@ class v8DistLoss(v8DetectionLoss):
 
     def calculate_distance_loss(
         self,
-        pred_distances: torch.Tensor, # predicted distances [b, 8400, 1]
-        gt_distances: torch.Tensor,   # GT distances [num_obj, 3]
-        target_gt_idx: torch.Tensor,  # targets object index [b, 8400]
-        n_max_boxes: int              # max number of boxes per batch
+        gt_distances: torch.Tensor,   # GT distances [b, n_max_boxes, 1]
+        target_gt_idx: torch.Tensor,  # targets object index [b, h*w]
+        fg_mask: torch.Tensor,        # foreground mask (b, h*w)
+        n_max_boxes: int,             # max number of boxes per batch
+        pred_dist: torch.Tensor,      # predicted distance [b, h*w, 1]
     ) -> torch.Tensor:
-        max_dist = self.hyp.max_dist
+        device = pred_dist.device
+        bs = pred_dist.shape[0]
+        max_dist = float(self.hyp.max_dist)
 
-        # skip if no gt distances
-        if gt_distances.numel() == 0 or target_gt_idx.numel() == 0:
-            return torch.tensor(0.0, device=pred_distances.device)
+        if fg_mask.sum() == 0:
+            return torch.tensor(0.0, device=device)
 
-        bs = gt_distances.shape[0]
-        batch_ind = torch.arange(end=bs, dtype=torch.int64, device=gt_distances.device)[..., None]
-        target_gt_idx = target_gt_idx + batch_ind * n_max_boxes  # (b, h*w)
-        target_gt_idx = target_gt_idx.long() # enforce long dtype for indexing
+        # flatten GT indexing
+        batch_offset = torch.arange(bs, device=device).unsqueeze(1) * n_max_boxes
+        gt_idx_global = (target_gt_idx + batch_offset).long()
 
-        target_dist = gt_distances.flatten()[target_gt_idx]
-        target_dist = (target_dist / max_dist).unsqueeze(2)
-        dist_loss = self.huber(pred_distances, target_dist)
+        # normalize predicted distances, set max to 1.5 to avoid huge loss
+        pred_dist = torch.clamp(pred_dist, 1e-3, 1.5)
 
-        return dist_loss
+        target_dist = gt_distances.flatten()[gt_idx_global]
+        target_dist = target_dist.unsqueeze(2) / max_dist
+
+        valid = fg_mask.unsqueeze(2) & torch.isfinite(target_dist) & torch.isfinite(pred_dist)
+        if valid.sum() == 0:
+            return torch.tensor(0.0, device=device)
+        
+        pred_dist = pred_dist[valid]
+        target_dist = target_dist[valid]
+
+        # distance-aware weighting to improve near object accuracy
+        weight = 1.0 / (target_dist + 0.05)
+        loss = weight * self.huber(pred_dist, target_dist)
+
+        return loss.mean()
         
 
 class E2EDetectLoss:

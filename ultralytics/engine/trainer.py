@@ -275,6 +275,11 @@ class BaseTrainer:
             else []
         )
         always_freeze_names = [".dfl"]  # always freeze these layers
+        
+        # freeze other layers for distance estimation (not recommended, only for model experiment/analysis)
+        # freeze_list += range(23)
+        # always_freeze_names += [".23.cv2", ".23.cv3"]
+
         freeze_layer_names = [f"model.{x}." for x in freeze_list] + always_freeze_names
         self.freeze_layer_names = freeze_layer_names
         for k, v in self.model.named_parameters():
@@ -388,8 +393,12 @@ class BaseTrainer:
                 self.train_loader.sampler.set_epoch(epoch)
             pbar = enumerate(self.train_loader)
             # Update dataloader attributes (optional)
-            if epoch == (self.epochs - self.args.close_mosaic):
+            if self.args.task != "dist" and epoch == (self.epochs - self.args.close_mosaic):
                 self._close_dataloader_mosaic()
+                self.train_loader.reset()
+            if self.args.task == "dist" and ((epoch == 0 and self.epochs <= self.args.close_dist_sensitive) or
+                                            epoch == (self.epochs - self.args.close_dist_sensitive)):
+                self._close_dataloader_dist_sensitive()
                 self.train_loader.reset()
 
             if RANK in {-1, 0}:
@@ -810,6 +819,7 @@ class BaseTrainer:
                     "batch",
                     "device",
                     "close_mosaic",
+                    "close_dist_sensitive",
                 ):  # allow arg updates to reduce memory or update device on resume
                     if k in overrides:
                         setattr(self.args, k, overrides[k])
@@ -881,8 +891,10 @@ class BaseTrainer:
             self.epochs += ckpt["epoch"]  # finetune additional epochs
         self._load_checkpoint_state(ckpt)
         self.start_epoch = start_epoch
-        if start_epoch > (self.epochs - self.args.close_mosaic):
+        if self.args.task != "dist" and start_epoch > (self.epochs - self.args.close_mosaic):
             self._close_dataloader_mosaic()
+        if self.args.task == "dist" and start_epoch > (self.epochs - self.args.close_dist_sensitive):
+            self._close_dataloader_dist_sensitive()
 
     def _close_dataloader_mosaic(self):
         """Update dataloaders to stop using mosaic augmentation."""
@@ -891,6 +903,14 @@ class BaseTrainer:
         if hasattr(self.train_loader.dataset, "close_mosaic"):
             LOGGER.info("Closing dataloader mosaic")
             self.train_loader.dataset.close_mosaic(hyp=copy(self.args))
+
+    def _close_dataloader_dist_sensitive(self):
+        """Update dataloaders to stop using distance sensitive augmentation."""
+        if hasattr(self.train_loader.dataset, "dist_sensitive"):
+            self.train_loader.dataset.dist_sensitive = False
+        if hasattr(self.train_loader.dataset, "close_dist_sensitive"):
+            LOGGER.info("Closing dataloader distance sensitive augmentation")
+            self.train_loader.dataset.close_dist_sensitive(hyp=copy(self.args))
 
     def build_optimizer(self, model, name="auto", lr=0.001, momentum=0.9, decay=1e-5, iterations=1e5):
         """

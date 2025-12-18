@@ -230,6 +230,8 @@ def detect_objects(model, input_path, target_fps = 24, show_bev = False):
             return
 
         result = model(img)[0]
+        # print(result.distances)
+        # print(result.boxes.xywh[0])
         annotated_img = result.plot()
 
         # Show result

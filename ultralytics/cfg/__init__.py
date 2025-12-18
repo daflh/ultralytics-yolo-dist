@@ -59,7 +59,7 @@ TASK2DATA = {
     "classify": "imagenet10",
     "pose": "coco8-pose.yaml",
     "obb": "dota8.yaml",
-    "dist": None # TODO: add KITTI?
+    "dist": "KITTI.yaml"
 }
 TASK2MODEL = {
     "detect": "yolo11n.pt",

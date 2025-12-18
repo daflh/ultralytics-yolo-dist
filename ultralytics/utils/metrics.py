@@ -1613,19 +1613,25 @@ class DistMetrics(DetMetrics):
     def keys(self) -> list[str]:
         return DetMetrics.keys.fget(self) + [
             "metrics/MAE(D)", # Mean Absolute Error
-            # "metrics/MRE(D)", # Mean Relative Error, suspectible to outliers, MAE is preferred
-            "metrics/MDE(D)" # Mean Distance Error, like MAE but penalize FN
+            "metrics/MRE(D)", # Mean Relative Error, suspectible to outliers
+            # "metrics/MDE(D)" # Mean Distance Error, like MAE but penalize FN
         ]
+    
+    @property
+    def fitness(self) -> float:
+        mae = self._dist_metrics[0, 0]
+        dist_fitness = 1 / (1 + mae)
+        return dist_fitness + DetMetrics.fitness.fget(self)
 
     def mean_results(self) -> list[float]:
         # Compute metrics during process()
         base = DetMetrics.mean_results(self)
-        return base + [float(self._dist_metrics[0, 0]), float(self._dist_metrics[0, 3])] # MAE, MDE
+        return base + [float(self._dist_metrics[0, 0]), float(self._dist_metrics[0, 1])] # MAE, MRE
 
     def print_dist_metrics(self):
         print(f"Distance metrics - MAE: {self._dist_metrics[0, 0]:.2f}, MAE(d>10): {self._dist_metrics[0, 4]:.2f}, " +
               f"MAE(d>25): {self._dist_metrics[0, 5]:.2f}, MAE(d>50): {self._dist_metrics[0, 6]:.2f}, " +
-              f"RMSE: {self._dist_metrics[0, 2]:.2f}, MDE: {self._dist_metrics[0, 3]:.2f}")
+              f"MRE: {self._dist_metrics[0, 1]:.2f}, RMSE: {self._dist_metrics[0, 2]:.2f}, MDE: {self._dist_metrics[0, 3]:.2f}")
         
     def class_result(self, i: int) -> list[float]:
         # Append per-class metrics for class index i (indexed by ap_class_index)
@@ -1661,8 +1667,8 @@ class DistMetrics(DetMetrics):
             
             # MAE, MRE, RMSE calculation
             if sel.sum() > 0:
-                # TODO: fix don't take account err == -1
                 err = np.abs(pred_dist[sel] - target_dist[sel])
+                err = err[err != -1] # just in case, remove invalid values
                 denom = np.abs(target_dist[sel]) + 1e-9
                 self._dist_metrics[0, 0] = float(np.mean(err)) # MAE
                 self._dist_metrics[0, 1] = float(np.mean(err / denom)) # MRE
