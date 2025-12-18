@@ -366,23 +366,22 @@ class Dist(Detect):
 
     def forward(self, x: list[torch.Tensor]) -> torch.Tensor | tuple:
         bs = x[0].shape[0]  # batch size
-
         dist_preds = []
+
         # distance predictions per feature map scale (usually nl=3 scales)
         for i in range(self.nl):
             # get outputs bbox in grid units per feature map
-            raw_bbox_pred = self.cv2[i](x[i])  # (bs, reg_max*4, h, w)
-            _, _, x_h, x_w = raw_bbox_pred.shape
-            bbox_pred = self.dfl(raw_bbox_pred.view(bs, self.reg_max * 4, -1))
+            bbox_distri_pred = self.cv2[i](x[i])  # (bs, reg_max*4, h, w)
+            _, _, x_h, x_w = bbox_distri_pred.shape
+            bbox_pred = self.dfl(bbox_distri_pred.view(bs, self.reg_max * 4, -1))
             bbox_pred = bbox_pred.view(bs, 4, x_h, x_w)  # (bs, 4, h, w)
             _, b_t, _, b_b = bbox_pred.unbind(1)
-
             h_grid = b_t + b_b  # bbox height in grid units
             y_base = b_b  # bbox bottom
 
             # cls logits for this scale
-            cls_logits = self.cv3[i](x[i])  # (bs, nc, h, w)
-            cls_prob = cls_logits.sigmoid().detach()
+            cls_logits_pred = self.cv3[i](x[i])  # (bs, nc, h, w)
+            cls_prob = cls_logits_pred.sigmoid().detach()
             # expected physical height (scalar per anchor)
             expected_h = torch.sum(
                 cls_prob * self.class_height.view(1, -1, 1, 1),
@@ -396,27 +395,31 @@ class Dist(Detect):
                 y_base,  # base point y for ground plane/horizon geometry
                 expected_h  # soft class conditioning
             ], dim=1)
-
             geo_feat = self.geo_embed[i](geo)
             # fuse raw features with geometry bbox info
-            fused = torch.cat([x[i], geo_feat], dim=1)
+            fused_feats = torch.cat([x[i], geo_feat], dim=1)
+            dist_pred = self.cv4[i](fused_feats)
 
-            raw_dist = self.cv4[i](fused)
-            dist_preds.append(raw_dist.view(bs, self.ne, -1))
+            # construct post-detection x
+            x[i] = torch.cat((bbox_distri_pred, cls_logits_pred), 1)
+
+            dist_preds.append(dist_pred.view(bs, self.ne, -1))
 
         # concatenate all distance predictions across feature map scales
         pred_dist = torch.cat(dist_preds, dim=2)
-        det = Detect.forward(self, x)
 
         if self.training:
-            return det, pred_dist
+            return x, pred_dist
         
+        # decode predicted bboxes and class probabilities
+        y = self._inference(x)
+
         if self.export:
-            return torch.cat([det, pred_dist], 1)
+            return torch.cat([y, pred_dist], 1)
         else:  # inference
             # second element passed to criterion for loss calculation during val
-            return (torch.cat([det[0], pred_dist], 1),
-                    (det[1], pred_dist))
+            return (torch.cat([y, pred_dist], 1),
+                    (x, pred_dist))
 
 
 class Pose(Detect):

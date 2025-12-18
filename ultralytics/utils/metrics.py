@@ -1617,10 +1617,11 @@ class DistMetrics(DetMetrics):
             # "metrics/MDE(D)" # Mean Distance Error, like MAE but penalize FN
         ]
     
-    # @property
-    # def fitness(self) -> float:
-    #     # TODO: weighted combination of detection and distance metrics
-    #     return 1 / self._dist_metrics[0, 0] # get MAE
+    @property
+    def fitness(self) -> float:
+        mae = self._dist_metrics[0, 0]
+        dist_fitness = 1 / (1 + mae)
+        return dist_fitness + DetMetrics.fitness.fget(self)
 
     def mean_results(self) -> list[float]:
         # Compute metrics during process()
@@ -1666,8 +1667,8 @@ class DistMetrics(DetMetrics):
             
             # MAE, MRE, RMSE calculation
             if sel.sum() > 0:
-                # TODO: fix don't take account err == -1
                 err = np.abs(pred_dist[sel] - target_dist[sel])
+                err = err[err != -1] # just in case, remove invalid values
                 denom = np.abs(target_dist[sel]) + 1e-9
                 self._dist_metrics[0, 0] = float(np.mean(err)) # MAE
                 self._dist_metrics[0, 1] = float(np.mean(err / denom)) # MRE
