@@ -351,7 +351,8 @@ class Dist(Detect):
         # geometry encoder
         self.geo_embed = nn.ModuleList(
             nn.Sequential(
-                nn.Conv2d(4, geo_ch, 1), nn.ReLU()
+                nn.Conv2d(4, geo_ch, 1), nn.ReLU(),
+                nn.Dropout2d(p=0.05)
             ) for _ in ch
         )
 

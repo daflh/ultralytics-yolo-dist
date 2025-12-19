@@ -262,12 +262,12 @@ class YOLODataset(BaseDataset):
         """
         # Geometric augmentations
         hyp.degrees = 0.0
-        hyp.translate = 0.0
+        hyp.translate = 0.05
         hyp.scale = 0.0
         hyp.shear = 0.0
         hyp.perspective = 0.0
         hyp.flipud = 0.0
-        hyp.fliplr = 0.0
+        hyp.fliplr = 0.5
 
         # Spatial mixing augmentations
         hyp.mosaic = 0.0

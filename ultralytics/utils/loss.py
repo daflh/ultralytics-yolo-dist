@@ -875,7 +875,7 @@ class v8DistLoss(v8DetectionLoss):
         gt_idx_global = (target_gt_idx + batch_offset).long()
 
         # normalize predicted distances, set max to 1.5 to avoid huge loss
-        pred_dist = torch.clamp(pred_dist, 1e-3, 1.5)
+        pred_dist = torch.clamp(pred_dist, min=1e-3)
 
         target_dist = gt_distances.flatten()[gt_idx_global]
         target_dist = target_dist.unsqueeze(2) / max_dist
