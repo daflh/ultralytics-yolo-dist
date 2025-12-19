@@ -1599,8 +1599,7 @@ class DistMetrics(DetMetrics):
         # these arrays are appended per-batch by the validator via update_stats
         self.stats["pred_dist"] = []
         self.stats["target_dist"] = []
-        # per-prediction matched target class (length == n_pred per image).
-        # Filled by DistValidator._process_batch as -1 for unmatched preds.
+        # per-prediction matched target class (NaN / -1 for unmatched preds)
         self.stats["target_cls_pred"] = []
         self.mae_breakpoints = [10.0, 30.0, 50.0] # distance breakpoints for additional MAE metrics
         # stored agregated distance metrics
@@ -1667,13 +1666,12 @@ class DistMetrics(DetMetrics):
             target_dist = stats["target_dist"].astype(float)
             tp = stats["tp"]
             # use IoU@0.5 (first column) for matched indicators
-            matched = tp[:, 0].astype(bool) if tp.ndim == 2 and tp.shape[1] > 0 else np.zeros(tp.shape[0], dtype=bool)
+            matched = tp[:, 0].astype(bool)
             sel = matched & np.isfinite(target_dist)
             
             # MAE, MRE, RMSE calculation
             if sel.sum() > 0:
                 err = np.abs(pred_dist[sel] - target_dist[sel])
-                err = err[err != -1] # just in case, remove invalid values
                 denom = np.abs(target_dist[sel]) + 1e-9
                 self._dist_metrics[0, 0] = float(np.mean(err)) # MAE
                 self._dist_metrics[0, 1] = float(np.mean(err / denom)) # MRE

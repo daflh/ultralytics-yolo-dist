@@ -14,7 +14,7 @@ def load_dataset(img_path = None):
         img_path = img_path,
         augment = False,
         data = {
-            'nc': 9
+            'nc': 7
         }
     )
 
