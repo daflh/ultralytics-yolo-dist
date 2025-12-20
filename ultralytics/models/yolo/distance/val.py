@@ -64,10 +64,12 @@ class DistValidator(DetectionValidator):
         else:
             pred_d = np.zeros((n_pred,), dtype=float)
 
+        # whether to use Euclidean distance or z-axis/forward distance
+        use_euclidean = self.args.get("use_euclidean", False)
         # Ground truth distances
         tgt_d = batch.get("distances")
         if tgt_d is not None and tgt_d.shape[0]:
-            if self.args.get("use_euclidean", False):
+            if use_euclidean:
                 tgt_d = torch.linalg.vector_norm(tgt_d, dim=1)
             else:
                 tgt_d = tgt_d[:, -1]
@@ -93,8 +95,9 @@ class DistValidator(DetectionValidator):
                 target_dist[pi] = tgt_d[gi]
                 target_cls_pred[pi] = gt_cls[gi]
 
-        # scale prediction if normalized
-        pred_dist *= self.args.get("max_dist", 100.0)
+        # scale back prediction distance to original
+        max_dist = self.args.get("max_dist", 100.0)
+        pred_dist *= max_dist
 
         return {
             "tp": tp,
