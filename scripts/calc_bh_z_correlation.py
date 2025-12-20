@@ -119,7 +119,7 @@ def fit_inverse_regression(processed_labels, plot_graph=True):
 if __name__ == "__main__":
     dataset = load_dataset('D:\\UGM\\tugas akhir\\datasets\\KITTI2017\\images\\train')
     # dataset = load_dataset('D:\\UGM\\tugas akhir\\datasets\\KITTI2017\\images\\val')
-    processed_labels = extract_labels_data(dataset.get_labels())
+    processed_labels = extract_labels_data(dataset.labels)
 
     calculate_correlations(processed_labels)
     fit_inverse_regression(processed_labels, plot_graph=PLOT_CORRELATION_GRAPH)
