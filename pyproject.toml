@@ -28,7 +28,7 @@ name = "ultralytics"
 dynamic = ["version"]
 description = "Ultralytics YOLO 🚀 for SOTA object detection, multi-object tracking, instance segmentation, pose estimation and image classification."
 readme = "README.md"
-requires-python = ">=3.8"
+requires-python = ">=3.10"
 license = { "text" = "AGPL-3.0" }
 keywords = ["machine-learning", "deep-learning", "computer-vision", "ML", "DL", "AI", "YOLO", "YOLOv3", "YOLOv5", "YOLOv8", "YOLOv9", "YOLOv10", "YOLO11", "HUB", "Ultralytics"]
 authors = [
@@ -74,6 +74,8 @@ dependencies = [
     "psutil", # system utilization
     "polars",
     "ultralytics-thop>=2.0.0", # FLOPs computation https://github.com/ultralytics/thop
+    "torchinfo>=1.8.0",
+    "tqdm>=4.67.1",
 ]
 
 # Optional dependencies ------------------------------------------------------------------------------------------------
@@ -124,6 +126,19 @@ typing = [
     "types-pyyaml",
     "types-requests",
     "types-shapely",
+]
+
+[[tool.uv.index]]
+name = "pytorch-cu126"
+url = "https://download.pytorch.org/whl/cu126"
+explicit = true
+
+[tool.uv.sources]
+torch = [
+  { index = "pytorch-cu126", marker = "sys_platform == 'linux' or sys_platform == 'win32'" },
+]
+torchvision = [
+  { index = "pytorch-cu126", marker = "sys_platform == 'linux' or sys_platform == 'win32'" },
 ]
 
 [project.urls]
