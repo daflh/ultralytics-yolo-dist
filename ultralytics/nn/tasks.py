@@ -310,6 +310,7 @@ class BaseModel(torch.nn.Module):
         model = weights["model"] if isinstance(weights, dict) else weights  # torchvision models are not dicts
         src_task, curr_task = guess_model_task(model), guess_model_task(self)
         src_nc, curr_nc = model.model[-1].nc, self.model[-1].nc
+        # show warnings if transferring between different tasks or class counts
         if src_task != curr_task:
             LOGGER.warning(f"Transferring weights from a model of {src_task} to {curr_task}.")
         else:
