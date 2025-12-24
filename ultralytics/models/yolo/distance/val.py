@@ -124,7 +124,8 @@ class DistValidator(DetectionValidator):
     
     def print_results(self) -> None:
         super().print_results()
-        self.metrics.print_dist_metrics()
+        if not self.training:
+            self.metrics.print_dist_metrics()
     
     def plot_predictions(self, batch: dict[str, Any], preds: list[torch.Tensor], ni: int) -> None:
         for p in preds:

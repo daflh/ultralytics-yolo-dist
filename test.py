@@ -1,6 +1,7 @@
 from ultralytics import YOLO
 from torchinfo import summary
 from test_utils import detect_objects, send_telegram_message
+from ultralytics.utils.benchmarks import benchmark
 
 dataset_path = 'D:\\UGM\\tugas akhir\\3. skripsi\\code\\datasets'
 # dataset_path = '/home/ugm/Documents/zherk/datasets'
@@ -20,12 +21,15 @@ def main():
     # model = YOLO("yolo11n.pt")
     # model = YOLO("yolo11n-obb.pt")
 
+    # model.info(verbose=True, detailed=True)
+    # summary(model.model, input_size=(1, 3, 640, 640))
+    
     model.add_callback("on_train_epoch_end", on_epoch_end)
 
     # model.load(weights="../weights/yolo11n.pt")
     # model.load(weights="../weights/yolo11n_KITTI_pretrained_ep600.pt")
-    model.load(weights="../weights/yolo11n_KITTI_2025-12-09-01_ep500.pt")
-    # model.load(weights="../weights/yolo11n-dist_2025-12-18-01_ep80.pt")
+    # model.load(weights="../weights/yolo11n_KITTI_2025-12-09-01_ep500.pt")
+    model.load(weights="../weights/yolo11n-dist_2025-12-18-01_ep80.pt")
     # model.load(weights="./runs/dist/train104/weights/best.pt")
     # model.load(weights="./best.pt")
     
@@ -41,15 +45,16 @@ def main():
     # metrics = model.val(data=dataset_path + "/coco8.yaml", imgsz=640, batch=16)
     # print(metrics)
     
-    detect_objects(model, "../datasets/street.jpg")
+    # detect_objects(model, "../datasets/street.jpg")
     # detect_objects(model, "../datasets/005992.png")
-    # detect_objects(model, "../datasets/000072.png")
+    detect_objects(model, "../datasets/000072.png")
     # detect_objects(model, "../datasets/new-york.mp4")
-    # detect_objects(model, "../datasets/kitti-track-video/0014.mp4", 10, True)
-    # detect_objects(model, "../datasets/kitti-sequence2.mp4")
+    # detect_objects(model, "../datasets/kitti-track-video/0014.mp4",target_fps = 10, show_bev = True )
 
-    # model.info(verbose=True, detailed=True)
-    # summary(model.model, input_size=(1, 3, 640, 640))
+    # model.export(format="onnx", imgsz=640, opset=13, dynamic=False)
+    # model.export(format="ncnn")
+
+    # benchmark(model="yolo11n.pt", data="coco8.yaml", imgsz=640, half=False, device='cpu')
 
 if __name__ == "__main__":
     main()
