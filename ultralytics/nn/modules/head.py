@@ -345,21 +345,17 @@ class Dist(Detect):
         self.ne = 1  # number of extra parameters (1 number for absolute distance)
         geo_ch = 16  # number of geometric feature channels
 
-        # class-specific height embeddings
-        self.class_height = nn.Parameter(torch.ones(nc))
-
         # geometry encoder
         self.geo_embed = nn.ModuleList(
             nn.Sequential(
-                nn.Conv2d(4, geo_ch, 1), nn.ReLU(),
-                nn.Dropout2d(p=0.05)
+                nn.Conv2d(2, geo_ch, 1), nn.ReLU(),
             ) for _ in ch
         )
 
         # Distance residual prediction head
         self.cv4 = nn.ModuleList(
             nn.Sequential(
-                nn.Conv2d(x + geo_ch, 128, 1), nn.ReLU(),
+                nn.Conv2d(x + geo_ch, 128, 1), nn.ReLU(),  # fuse raw feats with geo feats
                 nn.Conv2d(128, 64, 1), nn.ReLU(),
                 nn.Conv2d(64, 1, 1)
             ) for x in ch
@@ -371,40 +367,45 @@ class Dist(Detect):
 
         # distance predictions per feature map scale (usually nl=3 scales)
         for i in range(self.nl):
-            # get outputs bbox in grid units per feature map
+            # get outputs bbox in grid units and cls logits for this scale
             bbox_distri_pred = self.cv2[i](x[i])  # (bs, reg_max*4, h, w)
+            cls_logits_pred = self.cv3[i](x[i])  # (bs, nc, h, w)
+
             _, _, x_h, x_w = bbox_distri_pred.shape
             bbox_pred = self.dfl(bbox_distri_pred.view(bs, self.reg_max * 4, -1))
             bbox_pred = bbox_pred.view(bs, 4, x_h, x_w)  # (bs, 4, h, w)
-            _, b_t, _, b_b = bbox_pred.unbind(1)
-            h_grid = b_t + b_b  # bbox height in grid units
-            y_base = b_b  # bbox bottom
+            b_l, b_t, b_r, b_b = bbox_pred.unbind(1)
+            
+            stride_norm = self.stride[i] / torch.max(self.stride)
+            # normalized bbox size
+            bh_size = (b_t + b_b) * stride_norm
+            bw_size = (b_l + b_r) * stride_norm
+            # bd_size = (bh_size**2 + bw_size**2)**0.5  # maybe redundant
 
-            # cls logits for this scale
-            cls_logits_pred = self.cv3[i](x[i])  # (bs, nc, h, w)
-            cls_prob = cls_logits_pred.sigmoid().detach()
-            # expected physical height (scalar per anchor)
-            expected_h = torch.sum(
-                cls_prob * self.class_height.view(1, -1, 1, 1),
-                dim=1
-            )
+            # NOTE: below are geometric positional features, you can add these to raw_geo_feat, or (maybe) even better
+            # make its own encoder, but from our experiment, we found it to be not helpful, maybe because these
+            # will introduce shortcuts for the model to estimate distance, along with noises
+            # # grid coordinates for absolute positioning
+            # grid_y = torch.arange(x_h, device=x[i].device, dtype=x[i].dtype).view(1, x_h, 1).expand(bs, x_h, x_w)
+            # grid_x = torch.arange(x_w, device=x[i].device, dtype=x[i].dtype).view(1, 1, x_w).expand(bs, x_h, x_w)
+            # # normalized bbox center (anchor position + offset)
+            # x_center = (grid_x + (b_r - b_l) / 2 + 0.5) * stride_norm
+            # y_center = (grid_y + (b_b - b_t) / 2 + 0.5) * stride_norm
 
             # construct geometric feature
-            geo = torch.stack([
-                h_grid,  # apparent height
-                torch.log(h_grid + 1e-6),  # log height to linearize perspective
-                y_base,  # base point y for ground plane/horizon geometry
-                expected_h  # soft class conditioning
+            raw_geo_feat = torch.stack([
+                bh_size,  # apparent height
+                bw_size  # apparent width
             ], dim=1)
-            geo_feat = self.geo_embed[i](geo)
+            geo_feat = self.geo_embed[i](raw_geo_feat)
             # fuse raw features with geometry bbox info
             fused_feats = torch.cat([x[i], geo_feat], dim=1)
             dist_pred = self.cv4[i](fused_feats)
 
+            dist_preds.append(dist_pred.view(bs, self.ne, -1))
+
             # construct post-detection x
             x[i] = torch.cat((bbox_distri_pred, cls_logits_pred), 1)
-
-            dist_preds.append(dist_pred.view(bs, self.ne, -1))
 
         # concatenate all distance predictions across feature map scales
         pred_dist = torch.cat(dist_preds, dim=2)
