@@ -75,7 +75,7 @@ TASK2METRIC = {
     "classify": "metrics/accuracy_top1",
     "pose": "metrics/mAP50-95(P)",
     "obb": "metrics/mAP50-95(B)",
-    "dist": "metris/mAP50-95(B)" # TODO: add new metrics?
+    "dist": "metrics/mAP50-95(B)" # TODO: modify metric for distance-senstive detection
 }
 
 ARGV = sys.argv or ["", ""]  # sometimes sys.argv = []

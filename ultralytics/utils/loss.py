@@ -781,7 +781,6 @@ class v8DistLoss(v8DetectionLoss):
     def __init__(self, model):
         super().__init__(model)
         self.mse = nn.MSELoss()
-        self.huber = nn.HuberLoss(delta=1.0, reduction="none")
 
     def __call__(self, preds: Any, batch: dict[str, torch.Tensor]) -> tuple[torch.Tensor, torch.Tensor]:
         loss = torch.zeros(4, device=self.device)  # box, dist, cls, dfl
@@ -823,6 +822,7 @@ class v8DistLoss(v8DetectionLoss):
         )
 
         target_scores_sum = max(target_scores.sum(), 1)
+        n_max_boxes = gt_bboxes.shape[1]
 
         # Cls loss
         loss[2] = self.bce(pred_scores, target_scores.to(dtype)).sum() / target_scores_sum  # BCE
@@ -839,7 +839,7 @@ class v8DistLoss(v8DetectionLoss):
                 fg_mask,
             )
 
-        n_max_boxes = gt_bboxes.shape[1]
+        # Dist loss
         loss[1] = self.calculate_distance_loss(
             gt_distances=gt_dist,
             target_gt_idx=target_gt_idx,
@@ -889,7 +889,7 @@ class v8DistLoss(v8DetectionLoss):
 
         # distance-aware weighting to improve near object accuracy
         weight = 1.0 / (target_dist + 0.05)
-        loss = weight * self.huber(pred_dist, target_dist)
+        loss = weight * self.mse(pred_dist, target_dist)
 
         return loss.mean()
         

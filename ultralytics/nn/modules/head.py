@@ -342,22 +342,21 @@ class OBB(Detect):
 class Dist(Detect):
     def __init__(self, nc: int = 7, ch: tuple = ()):
         super().__init__(nc, ch)
-        self.ne = 1  # number of extra parameters (1 number for absolute distance)
+        self.ne = 1  # number of extra parameters (only 1 for absolute distance)
         geo_ch = 16  # number of geometric feature channels
 
-        # geometry encoder
+        # bbox geometry encoder
         self.geo_embed = nn.ModuleList(
-            nn.Sequential(
-                nn.Conv2d(2, geo_ch, 1), nn.ReLU(),
-            ) for _ in ch
+            Conv(2, geo_ch, 1) for _ in ch
         )
 
-        # Distance residual prediction head
+        c4 = max(ch[0] // 4, self.ne)
+        # distance estimation prediction head
         self.cv4 = nn.ModuleList(
             nn.Sequential(
-                nn.Conv2d(x + geo_ch, 128, 1), nn.ReLU(),  # fuse raw feats with geo feats
-                nn.Conv2d(128, 64, 1), nn.ReLU(),
-                nn.Conv2d(64, 1, 1)
+                Conv(x + geo_ch, c4, 3),
+                Conv(c4, c4, 3),
+                nn.Conv2d(c4, self.ne, 1)
             ) for x in ch
         )
 

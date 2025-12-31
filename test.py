@@ -54,7 +54,7 @@ def main():
     # detect_objects(model, "../datasets/005992.png")
     # detect_objects(model, "../datasets/000072.png")
     # detect_objects(model, "../datasets/new-york.mp4")
-    # detect_objects(model, "../datasets/kitti-track-video/0014.mp4",target_fps = 10, show_bev = True )
+    # detect_objects(model, "../datasets/kitti-track-video/0014.mp4", target_fps=10, show_bev=True)
 
     # model.export(format="onnx", imgsz=640, opset=13, dynamic=False)
     # model.export(format="ncnn")
