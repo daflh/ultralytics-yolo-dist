@@ -372,6 +372,8 @@ class Dist(Detect):
 
             _, _, x_h, x_w = bbox_distri_pred.shape
             bbox_pred = self.dfl(bbox_distri_pred.view(bs, self.reg_max * 4, -1))
+            if self.export and self.format == "ncnn":  # temporary fix for ncnn export
+                bbox_pred = bbox_pred.clamp(min=1.0)
             bbox_pred = bbox_pred.view(bs, 4, x_h, x_w)  # (bs, 4, h, w)
             b_l, b_t, b_r, b_b = bbox_pred.unbind(1)
             
