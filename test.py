@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 from ultralytics import YOLO
 from torchinfo import summary
-from test_utils import detect_objects, send_telegram_message
+from test_utils import detect_objects, send_telemetry_message
 from ultralytics.utils.benchmarks import benchmark
 
 dataset_path = 'D:\\UGM\\tugas akhir\\3. skripsi\\code\\datasets'
@@ -12,7 +12,7 @@ def on_epoch_end(trainer):
     eps = trainer.epochs
     # if ep == 1 or ep % 50 == 0 or ep == eps:
     if ep % 50 == 0 or ep == eps:
-        send_telegram_message(f"Epoch {ep} of {eps} done")
+        send_telemetry_message(f"Epoch {ep} of {eps} done")
         
 def main():
     # model = YOLO("yolo11n.yaml")
@@ -28,10 +28,9 @@ def main():
     model.add_callback("on_train_epoch_end", on_epoch_end)
 
     # model.load(weights="../weights/yolo11n.pt")
-    # model.load(weights="../weights/yolo11n_KITTI_pretrained_ep600.pt")
-    # model.load(weights="../weights/yolo11n_KITTI_2025-12-09-01_ep500.pt")
-    # model.load(weights="../weights/yolo11n-dist_2025-12-18-01_ep80.pt")
-    # model.load(weights="./runs/dist/train281/weights/best.pt")
+    # model.load(weights="../weights/yolo11n_2025-12-09-01_ep500.pt")
+    # model.load(weights="../weights/yolo11n-dist_2026-01-04-01_ep100.pt")
+    # model.load(weights="./runs/dist/train435/weights/best.pt")
     # model.load(weights="./best.pt")
 
     # phase 1 (yolo11n)

@@ -345,6 +345,10 @@ class Dist(Detect):
         self.ne = 1  # number of extra parameters (only 1 for absolute distance)
         geo_ch = 16  # number of geometric feature channels
 
+        # # class-aware influence embedding
+        # self.class_embed = nn.Parameter(torch.randn(nc) * 0.01)
+        # self.class_embed_bias = nn.Parameter(torch.zeros(1))
+
         # bbox geometry encoder
         self.geo_embed = nn.ModuleList(
             Conv(2, geo_ch, 1) for _ in ch
@@ -379,25 +383,29 @@ class Dist(Detect):
             
             stride_norm = self.stride[i] / torch.max(self.stride)
             # normalized bbox size
-            bh_size = (b_t + b_b) * stride_norm
-            bw_size = (b_l + b_r) * stride_norm
-            # bd_size = (bh_size**2 + bw_size**2)**0.5  # maybe redundant
+            bh_size = (b_t + b_b) * stride_norm  # apparent height
+            bw_size = (b_l + b_r) * stride_norm  # apparent width
+            bd_size = (bh_size**2 + bw_size**2)**0.5  # apparent diagonal length
 
-            # NOTE: below are geometric positional features, you can add these to raw_geo_feat, or (maybe) even better
-            # make its own encoder, but from our experiment, we found it to be not helpful, maybe because these
-            # will introduce shortcuts for the model to estimate distance, along with noises
-            # # grid coordinates for absolute positioning
+            # NOTE: below are geometric positional and class features, you may add these to raw_geo_feat,
+            # but our experiment found it to be not helpful
+            # # bbox center point clue
             # grid_y = torch.arange(x_h, device=x[i].device, dtype=x[i].dtype).view(1, x_h, 1).expand(bs, x_h, x_w)
             # grid_x = torch.arange(x_w, device=x[i].device, dtype=x[i].dtype).view(1, 1, x_w).expand(bs, x_h, x_w)
             # # normalized bbox center (anchor position + offset)
             # x_center = (grid_x + (b_r - b_l) / 2 + 0.5) * stride_norm
             # y_center = (grid_y + (b_b - b_t) / 2 + 0.5) * stride_norm
+            # # class-aware influence
+            # cls_prob = cls_logits_pred.sigmoid()
+            # cls_influence = torch.sum(
+            #     cls_prob * self.class_embed.view(1, -1, 1, 1),
+            #     dim=1
+            # ) + self.class_embed_bias
+            # # normalize influence to prevent scale explosion
+            # cls_influence = torch.tanh(cls_influence)
 
             # construct geometric feature
-            raw_geo_feat = torch.stack([
-                bh_size,  # apparent height
-                bw_size  # apparent width
-            ], dim=1)
+            raw_geo_feat = torch.stack([bh_size, bd_size], dim=1)
             geo_feat = self.geo_embed[i](raw_geo_feat)
             # fuse raw features with geometry bbox info
             fused_feats = torch.cat([x[i], geo_feat], dim=1)
