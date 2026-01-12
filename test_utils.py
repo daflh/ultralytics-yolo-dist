@@ -144,7 +144,7 @@ def send_telemetry_message(msg):
         print(f"Failed to send telemetry message: {e}")
 
 
-def detect_objects(model, input_path, target_fps = 24, show_bev = False):
+def detect_objects(model, input_path, target_fps=24, show_conf=False, show_bev=False):
     device = 'cuda' if torch.cuda.is_available() else 'cpu'
     # model.to(device)
     print(f"Using device: {device}")
@@ -181,7 +181,7 @@ def detect_objects(model, input_path, target_fps = 24, show_bev = False):
             frame_start = time.time()
 
             results = model.predict(frame, device=device)
-            annotated_frame = results[0].plot()
+            annotated_frame = results[0].plot(conf=show_conf)
 
             infer_time = time.time() - frame_start
             sleep_time = (1.0 / target_fps) - infer_time
@@ -232,7 +232,7 @@ def detect_objects(model, input_path, target_fps = 24, show_bev = False):
         result = model.predict(img, device=device)[0]
         # print(result.distances)
         # print(result.boxes.xywh[0])
-        annotated_img = result.plot()
+        annotated_img = result.plot(conf=show_conf)
 
         # Show result
         cv2.imshow("YOLO Detection Result", annotated_img)

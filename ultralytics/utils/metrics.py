@@ -1601,7 +1601,7 @@ class DistMetrics(DetMetrics):
         self.stats["target_dist"] = []
         # per-prediction matched target class (NaN / -1 for unmatched preds)
         self.stats["target_cls_pred"] = []
-        self.met_breakpoints = [10.0, 30.0, 50.0, 75.0] # distance breakpoints for additional mean metrics
+        self.met_breakpoints = [10.0, 20.0, 30.0, 40.0, 50.0] # distance breakpoints for additional mean metrics
         # mean metrics on all classes with the given breakpoints
         self._mean_dist_met = np.full((
             3, # MAE, MRE, RMSE

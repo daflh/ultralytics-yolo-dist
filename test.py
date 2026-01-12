@@ -28,8 +28,8 @@ def main():
     model.add_callback("on_train_epoch_end", on_epoch_end)
 
     # model.load(weights="../weights/yolo11n.pt")
-    # model.load(weights="../weights/yolo11n_2025-12-09-01_ep500.pt")
-    # model.load(weights="../weights/yolo11n-dist_2026-01-04-01_ep100.pt")
+    # model.load(weights="../weights/yolo11n_2026-01-12-01_ep200.pt")
+    # model.load(weights="../weights/yolo11n-dist_2026-01-12-02_ep200.pt")
     # model.load(weights="./runs/dist/train435/weights/best.pt")
     # model.load(weights="./best.pt")
 
