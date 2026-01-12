@@ -34,10 +34,11 @@ def main():
     # model.load(weights="./best.pt")
 
     # phase 1 (yolo11n)
-    # results = model.train(data=dataset_path + "/KITTI.yaml", epochs=500, imgsz=640, batch=32, workers=12)
+    # results = model.train(data=dataset_path + "/KITTI.yaml", epochs=200, imgsz=640, batch=32, workers=12,
+    #                       optimizer="AdamW", lr0=0.0009, momentum=0.9, warmup_bias_lr=0.0)
     # phase 2 (yolo11n-dist)
-    # results = model.train(data=dataset_path + "/KITTI.yaml", epochs=100, imgsz=640, batch=32, workers=12, freeze=9,
-    #                       close_dist_sensitive=100, optimizer="AdamW", lr0=0.0009, momentum=0.9, warmup_bias_lr=0.0, amp=False)
+    # results = model.train(data=dataset_path + "/KITTI.yaml", epochs=200, imgsz=640, batch=32, workers=12, freeze=9,
+    #                       optimizer="AdamW", lr0=0.0009, momentum=0.9, warmup_bias_lr=0.0)
     # results = model.train(data=dataset_path + "/KITTI.yaml", epochs=5, imgsz=640)
     # results = model.train(data=dataset_path + "/coco8-dist.yaml", epochs=5, imgsz=640)
     # results = model.train(data=dataset_path + "/coco8.yaml", epochs=5, imgsz=640)

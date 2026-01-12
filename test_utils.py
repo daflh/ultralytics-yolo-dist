@@ -146,7 +146,7 @@ def send_telemetry_message(msg):
 
 def detect_objects(model, input_path, target_fps = 24, show_bev = False):
     device = 'cuda' if torch.cuda.is_available() else 'cpu'
-    model.to(device)
+    # model.to(device)
     print(f"Using device: {device}")
 
     ext = os.path.splitext(input_path)[1].lower()
@@ -180,7 +180,7 @@ def detect_objects(model, input_path, target_fps = 24, show_bev = False):
 
             frame_start = time.time()
 
-            results = model(frame)
+            results = model.predict(frame, device=device)
             annotated_frame = results[0].plot()
 
             infer_time = time.time() - frame_start
@@ -229,7 +229,7 @@ def detect_objects(model, input_path, target_fps = 24, show_bev = False):
             print("Error: Unable to read image.")
             return
 
-        result = model(img)[0]
+        result = model.predict(img, device=device)[0]
         # print(result.distances)
         # print(result.boxes.xywh[0])
         annotated_img = result.plot()
