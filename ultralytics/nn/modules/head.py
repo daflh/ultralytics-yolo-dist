@@ -405,7 +405,11 @@ class Dist(Detect):
             # cls_influence = torch.tanh(cls_influence)
 
             # construct geometric feature
-            raw_geo_feat = torch.stack([bh_size, bd_size], dim=1)
+            raw_geo_feat = torch.stack([
+                # # geometric features combination
+                # bh_size, bw_size, bd_size, x_center, y_center, cls_influence
+                bh_size, bd_size
+            ], dim=1)
             geo_feat = self.geo_embed[i](raw_geo_feat)
             # fuse raw features with geometry bbox info
             fused_feats = torch.cat([x[i], geo_feat], dim=1)
